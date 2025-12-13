@@ -15,9 +15,12 @@ An HTML tool is:
 
 ## Non-negotiables for agents
 
-- **Single-file output**: implement each tool as a single `.html` file with embedded `<style>` and `<script>`.
+- **Single-file by default**: implement each tool as a single `.html` file with embedded `<style>` and `<script>` whenever practical.
 - **Avoid React / frameworks that require compilation**: do not introduce React/JSX or a build pipeline.
-- **CDN dependencies only** (when needed): load libraries via version-pinned URLs from reputable CDNs (e.g. cdnjs/jsDelivr). Prefer fewer dependencies.
+- **No build step**: keep tools runnable as static files without bundling/transpilation.
+- **Dependencies**:
+  - Prefer **version-pinned CDN URLs** (e.g. cdnjs/jsDelivr) for third-party libraries.
+  - You may use **repo-local shared JavaScript** from `lib/` when it meaningfully reduces duplication across tools (see below).
 - **Don’t bake secrets into the file**: never hardcode API keys or tokens.
 
 ## Recommended repo structure
@@ -26,9 +29,32 @@ Until a site generator exists, assume a simple static layout:
 
 - `index.html` – landing page listing tools (planned)
 - `tools/` – each tool as `tools/<slug>.html` (planned)
-- `assets/` – only if absolutely necessary (avoid shared JS that undermines “single file”)
+- `lib/` – optional shared JS used by multiple tools (deliberate, small, stable)
+- `assets/` – only if absolutely necessary (images, sample files, etc.)
 
 If a future GitHub Pages setup requires a different structure (e.g. `/docs`), follow that, but keep tools as single `.html` files.
+
+## Using `lib/` (shared JS) without turning this into a framework
+
+Using a `lib/` folder is allowed, but should be **rare and intentional**.
+
+Add (or extend) a file in `lib/` only when:
+
+- The behavior is clearly **reusable by multiple tools** (rule of thumb: already used or imminently needed by **2+** tools).
+- The abstraction is **small and stable** (utility-style functions, not “app frameworks”).
+- The calling pattern is consistent (a clean API surface, not a tangle of tool-specific conditionals).
+
+Do **not** add `lib/` code when:
+
+- It’s only used by one tool (keep it inline).
+- You’re guessing it might be reusable “someday”.
+- It introduces a de-facto framework or complex cross-tool coupling.
+
+If you do add shared code:
+
+- Keep it **vanilla JS** (no transpilation).
+- Keep it **dependency-light** and well-named.
+- Prefer **copy/pasteability** of tools over over-abstraction.
 
 ## Tool UX patterns (high leverage)
 
