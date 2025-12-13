@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hampton-s — HTML Tools</title>
+    <meta
+      name="description"
+      content="A home for small, static-hostable HTML tools (single-file web apps)."
+    />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0b1020;
+        --panel: #121a33;
+        --text: #e9ecf6;
+        --muted: #b7bfdc;
+        --link: #8ab4ff;
+        --border: rgba(255, 255, 255, 0.12);
+        --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f7f8fc;
+          --panel: #ffffff;
+          --text: #0e1633;
+          --muted: #4a557a;
+          --link: #1d4ed8;
+          --border: rgba(15, 23, 42, 0.12);
+          --shadow: 0 10px 30px rgba(2, 6, 23, 0.08);
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+          Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        background: radial-gradient(
+            1200px 600px at 20% 0%,
+            rgba(138, 180, 255, 0.18),
+            transparent 60%
+          ),
+          radial-gradient(
+            900px 500px at 90% 10%,
+            rgba(167, 139, 250, 0.12),
+            transparent 55%
+          ),
+          var(--bg);
+        color: var(--text);
+        line-height: 1.5;
+      }
+
+      a {
+        color: var(--link);
+        text-decoration: none;
+      }
+
+      a:hover,
+      a:focus-visible {
+        text-decoration: underline;
+      }
+
+      .wrap {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 56px 20px;
+      }
+
+      header {
+        margin-bottom: 18px;
+      }
+
+      h1 {
+        font-size: 32px;
+        margin: 0 0 6px 0;
+        letter-spacing: -0.02em;
+      }
+
+      .subtitle {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .grid {
+        display: grid;
+        gap: 16px;
+        margin-top: 26px;
+      }
+
+      @media (min-width: 760px) {
+        .grid {
+          grid-template-columns: 1.2fr 0.8fr;
+          align-items: start;
+        }
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: var(--shadow);
+        padding: 18px 18px;
+      }
+
+      h2 {
+        margin: 0 0 10px 0;
+        font-size: 18px;
+        letter-spacing: -0.01em;
+      }
+
+      ul {
+        margin: 10px 0 0 18px;
+      }
+
+      .empty {
+        margin: 10px 0 0 0;
+        padding: 10px 12px;
+        border: 1px dashed var(--border);
+        border-radius: 12px;
+        color: var(--muted);
+      }
+
+      footer {
+        margin-top: 22px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+        font-size: 0.95em;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>Hampton-s</h1>
+        <p class="subtitle">
+          A home for small, static-hostable <strong>HTML tools</strong> — usually a
+          single <code>.html</code> file with inline CSS + JavaScript.
+        </p>
+      </header>
+
+      <div class="grid">
+        <section class="card" aria-labelledby="purpose">
+          <h2 id="purpose">Purpose</h2>
+          <p>
+            This site is meant to be a browsable collection of tiny web apps that
+            are easy to understand, easy to remix, and easy to host (no build
+            step required).
+          </p>
+          <ul>
+            <li>Each tool should have a stable URL (via GitHub Pages).</li>
+            <li>
+              Tools should stay copy/paste friendly and keep dependencies light.
+            </li>
+          </ul>
+        </section>
+
+        <section class="card" aria-labelledby="tools">
+          <h2 id="tools">Tools available</h2>
+          <ul>
+            <li><strong>No tools yet.</strong></li>
+          </ul>
+          <p style="margin: 12px 0 0 0">
+            Convention (once it exists): <code>tools/&lt;slug&gt;.html</code>
+          </p>
+        </section>
+      </div>
+
+      <footer>
+        See <a href="README.md">README</a> for contributing conventions, or visit
+        the
+        <a
+          href="https://github.com/ZainRizvi/HtmlTools"
+          target="_blank"
+          rel="noopener noreferrer"
+          >GitHub repository</a
+        >.
+      </footer>
+    </div>
+  </body>
+</html>
