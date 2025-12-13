@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HTML tools</title>
+  <style>
+    :root {
+      --bg: #0b0d12;
+      --panel: #121826;
+      --text: #e8eefc;
+      --muted: #a9b5d1;
+      --border: rgba(255,255,255,.12);
+      --accent: #77a5ff;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      background: radial-gradient(1200px 700px at 20% 0%, #17213a 0%, var(--bg) 55%) fixed;
+      color: var(--text);
+    }
+    a { color: var(--accent); }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 22px; }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 20px 50px rgba(0,0,0,.35);
+    }
+    h1 { margin: 0 0 8px; font-size: 22px; }
+    p { margin: 0 0 10px; color: var(--muted); }
+    ul { margin: 10px 0 0; padding-left: 18px; }
+    li { margin: 8px 0; }
+    code { color: #cfe0ff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>HTML tools</h1>
+      <p>Single-file tools (static-hostable, no build step).</p>
+      <ul>
+        <li>
+          <a href="tools/svg-arc-text-generator.html">SVG Arc + Text-on-Arc Generator</a>
+          <div style="color:var(--muted); margin-top:4px; font-size: 13px;">Generate an SVG circular arc and place text along that arc; configure colors (including transparency) and fonts.</div>
+        </li>
+      </ul>
+      <p style="margin-top:12px">Repo conventions in <code>README.md</code> and <code>agents.MD</code>.</p>
+    </div>
+  </div>
+</body>
+</html>

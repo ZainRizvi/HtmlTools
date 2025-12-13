@@ -1,0 +1,830 @@
+<!--
+SVG Arc + Text-on-Arc Generator
+Prompt: "a tool that can generate SVG files for simple shapes... arc on a circle... text that follows that arc... configurable colors (including transparent) and text font/color"
+Created: 2025-12-13
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SVG Arc + Text-on-Arc Generator</title>
+  <style>
+    :root {
+      --bg: #0b0d12;
+      --panel: #121826;
+      --panel2: #0f1522;
+      --text: #e8eefc;
+      --muted: #a9b5d1;
+      --border: rgba(255,255,255,.12);
+      --accent: #77a5ff;
+      --danger: #ff6b6b;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      background: radial-gradient(1200px 700px at 20% 0%, #17213a 0%, var(--bg) 55%) fixed;
+      color: var(--text);
+    }
+    a { color: var(--accent); }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 22px; }
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 20px;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    header h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
+    header p { margin: 6px 0 0; color: var(--muted); max-width: 70ch; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 430px 1fr;
+      gap: 14px;
+      align-items: start;
+    }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 20px 50px rgba(0,0,0,.35);
+      backdrop-filter: blur(10px);
+    }
+
+    fieldset {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      margin: 0 0 12px;
+      background: rgba(0,0,0,.12);
+    }
+    legend { padding: 0 8px; color: var(--muted); font-size: 12px; letter-spacing: .3px; }
+
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    .row4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; }
+    @media (max-width: 520px) {
+      .row, .row3, .row4 { grid-template-columns: 1fr; }
+    }
+
+    label { display: grid; gap: 6px; font-size: 12px; color: var(--muted); }
+    input, select, textarea, button {
+      font: inherit;
+      color: var(--text);
+    }
+    input[type="number"], input[type="text"], select, textarea {
+      width: 100%;
+      padding: 9px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,.22);
+      outline: none;
+    }
+    textarea {
+      min-height: 170px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.35;
+      white-space: pre;
+      overflow: auto;
+    }
+    input[type="color"] {
+      width: 100%;
+      height: 38px;
+      padding: 0;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,.22);
+    }
+    input[type="range"] { width: 100%; }
+
+    .check {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 9px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,.22);
+      color: var(--text);
+      min-height: 38px;
+    }
+    .check input { transform: translateY(1px); }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+    .btnrow { display: flex; flex-wrap: wrap; gap: 10px; }
+    button {
+      border: 1px solid var(--border);
+      background: rgba(119,165,255,.12);
+      border-radius: 12px;
+      padding: 10px 12px;
+      cursor: pointer;
+    }
+    button:hover { background: rgba(119,165,255,.18); }
+    button.secondary { background: rgba(255,255,255,.07); }
+    button.secondary:hover { background: rgba(255,255,255,.10); }
+    button.danger { background: rgba(255,107,107,.12); }
+    button.danger:hover { background: rgba(255,107,107,.18); }
+
+    .preview {
+      display: grid;
+      gap: 12px;
+    }
+    .stage {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      background:
+        linear-gradient(45deg, rgba(255,255,255,.06) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.06) 75%, rgba(255,255,255,.06)) 0 0 / 26px 26px,
+        linear-gradient(45deg, rgba(255,255,255,.06) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.06) 75%, rgba(255,255,255,.06)) 13px 13px / 26px 26px,
+        rgba(0,0,0,.18);
+    }
+    .stage svg { width: 100%; height: auto; display: block; }
+
+    .toast { color: var(--muted); font-size: 12px; min-height: 16px; }
+    .k { font-family: var(--mono); font-size: 12px; color: #cfe0ff; }
+    footer { margin-top: 14px; color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>SVG Arc + Text-on-Arc Generator</h1>
+        <p>Create an SVG circle arc and place text that follows that arc. Configure arc stroke color/opacity (including fully transparent) and text font + color.</p>
+      </div>
+      <div class="btnrow">
+        <button id="btnCopy">Copy SVG</button>
+        <button id="btnDownload" class="secondary">Download .svg</button>
+        <button id="btnReset" class="danger">Reset</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <fieldset>
+          <legend>Canvas</legend>
+          <div class="row3">
+            <label>Width
+              <input id="w" type="number" min="16" max="4096" step="1" />
+            </label>
+            <label>Height
+              <input id="h" type="number" min="16" max="4096" step="1" />
+            </label>
+            <label>Padding
+              <input id="pad" type="number" min="0" max="1000" step="1" />
+            </label>
+          </div>
+          <div class="row3" style="margin-top:10px">
+            <label>Center X
+              <input id="cx" type="number" step="1" />
+            </label>
+            <label>Center Y
+              <input id="cy" type="number" step="1" />
+            </label>
+            <label>Radius
+              <input id="r" type="number" min="1" step="1" />
+            </label>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <label>Background
+              <select id="bgMode">
+                <option value="none">None</option>
+                <option value="solid">Solid color</option>
+              </select>
+            </label>
+            <label>Background color
+              <input id="bgColor" type="color" />
+            </label>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <label>Background opacity <span class="k" id="bgAlphaLabel"></span>
+              <input id="bgAlpha" type="range" min="0" max="1" step="0.01" />
+            </label>
+            <div class="check" style="align-self:end">
+              <input id="guides" type="checkbox" />
+              <span>Show guides (circle + axes)</span>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Arc</legend>
+          <div class="row3">
+            <label>Start angle (°)
+              <input id="start" type="number" step="1" />
+            </label>
+            <label>Sweep (°)
+              <input id="sweep" type="number" min="0" max="360" step="1" />
+            </label>
+            <div class="check" style="align-self:end">
+              <input id="clockwise" type="checkbox" />
+              <span>Clockwise</span>
+            </div>
+          </div>
+          <div class="row3" style="margin-top:10px">
+            <label>Stroke width
+              <input id="strokeW" type="number" min="0" max="500" step="1" />
+            </label>
+            <label>Line cap
+              <select id="linecap">
+                <option value="butt">butt</option>
+                <option value="round">round</option>
+                <option value="square">square</option>
+              </select>
+            </label>
+            <label>Stroke color
+              <input id="strokeColor" type="color" />
+            </label>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <label>Stroke opacity <span class="k" id="strokeAlphaLabel"></span>
+              <input id="strokeAlpha" type="range" min="0" max="1" step="0.01" />
+            </label>
+            <div class="check" style="align-self:end">
+              <input id="hideArc" type="checkbox" />
+              <span>Hide arc stroke (keep path for text)</span>
+            </div>
+          </div>
+          <div class="hint">
+            Angles use <span class="k">0° at 12 o’clock</span> and increase clockwise when “Clockwise” is checked.
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Text on arc</legend>
+          <label>Text
+            <input id="text" type="text" />
+          </label>
+          <div class="row3" style="margin-top:10px">
+            <label>Font family
+              <input id="fontFamily" type="text" />
+            </label>
+            <label>Font size
+              <input id="fontSize" type="number" min="1" max="500" step="1" />
+            </label>
+            <label>Font weight
+              <select id="fontWeight">
+                <option value="100">100</option>
+                <option value="200">200</option>
+                <option value="300">300</option>
+                <option value="400">400</option>
+                <option value="500">500</option>
+                <option value="600">600</option>
+                <option value="700">700</option>
+                <option value="800">800</option>
+                <option value="900">900</option>
+              </select>
+            </label>
+          </div>
+          <div class="row3" style="margin-top:10px">
+            <label>Text color
+              <input id="textColor" type="color" />
+            </label>
+            <label>Text opacity <span class="k" id="textAlphaLabel"></span>
+              <input id="textAlpha" type="range" min="0" max="1" step="0.01" />
+            </label>
+            <label>Text offset (dy)
+              <input id="textDy" type="number" step="1" />
+            </label>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <label>Start offset (%)
+              <input id="startOffset" type="number" min="0" max="100" step="0.1" />
+            </label>
+            <label>Text anchor
+              <select id="textAnchor">
+                <option value="start">start</option>
+                <option value="middle">middle</option>
+                <option value="end">end</option>
+              </select>
+            </label>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <label>Letter spacing
+              <input id="letterSpacing" type="number" step="0.1" />
+            </label>
+            <div class="check" style="align-self:end">
+              <input id="reverseText" type="checkbox" />
+              <span>Reverse text direction</span>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset style="margin-bottom:0">
+          <legend>Export</legend>
+          <div class="row">
+            <label>Filename
+              <input id="filename" type="text" />
+            </label>
+            <div class="check" style="align-self:end">
+              <input id="pretty" type="checkbox" />
+              <span>Pretty-print SVG</span>
+            </div>
+          </div>
+          <div class="hint">Settings are stored in the URL so you can bookmark/share this configuration.</div>
+        </fieldset>
+      </div>
+
+      <div class="card preview">
+        <div class="stage" aria-label="SVG preview">
+          <div id="preview"></div>
+        </div>
+        <div>
+          <label style="color:var(--muted)">SVG output</label>
+          <textarea id="out" spellcheck="false"></textarea>
+          <div class="toast" id="toast" aria-live="polite"></div>
+          <div class="hint">
+            Tip: In SVG, you can also control transparency using <span class="k">stroke-opacity</span> and <span class="k">fill-opacity</span>.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      This tool is a single static HTML file. Save it, host it, or view source.
+    </footer>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    const defaultState = Object.freeze({
+      w: 800,
+      h: 500,
+      pad: 24,
+      cx: 400,
+      cy: 250,
+      r: 180,
+
+      bgMode: 'none',
+      bgColor: '#0b0d12',
+      bgAlpha: 1,
+      guides: false,
+
+      start: 0,
+      sweep: 220,
+      clockwise: true,
+      strokeW: 10,
+      linecap: 'round',
+      strokeColor: '#77a5ff',
+      strokeAlpha: 1,
+      hideArc: false,
+
+      text: 'TEXT ON AN ARC',
+      fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+      fontSize: 32,
+      fontWeight: '700',
+      textColor: '#e8eefc',
+      textAlpha: 1,
+      textDy: 0,
+      startOffset: 50,
+      textAnchor: 'middle',
+      letterSpacing: 0,
+      reverseText: false,
+
+      filename: 'arc-text.svg',
+      pretty: true,
+    });
+
+    function clamp(n, a, b) {
+      const x = Number.isFinite(n) ? n : a;
+      return Math.min(b, Math.max(a, x));
+    }
+
+    function num(v) {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function fmt(x) {
+      // keep SVG stable and compact
+      return (Math.round(x * 1000) / 1000).toString();
+    }
+
+    function polar(cx, cy, r, angleDegTop0) {
+      // 0° at 12 o'clock
+      const rad = (angleDegTop0 - 90) * Math.PI / 180;
+      return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+    }
+
+    function arcPathD({ cx, cy, r, start, sweep, clockwise }) {
+      const sw = clamp(Math.abs(sweep), 0, 360);
+      const dir = clockwise ? 1 : -1;
+
+      if (sw === 0) {
+        const p = polar(cx, cy, r, start);
+        return `M ${fmt(p.x)} ${fmt(p.y)}`;
+      }
+
+      const a0 = start;
+      const a1 = start + dir * sw;
+      const p0 = polar(cx, cy, r, a0);
+      const p1 = polar(cx, cy, r, a1);
+      const sweepFlag = clockwise ? 1 : 0;
+
+      // Full circle needs two arcs.
+      if (sw >= 360) {
+        const am = start + dir * 180;
+        const pm = polar(cx, cy, r, am);
+        return [
+          `M ${fmt(p0.x)} ${fmt(p0.y)}`,
+          `A ${fmt(r)} ${fmt(r)} 0 1 ${sweepFlag} ${fmt(pm.x)} ${fmt(pm.y)}`,
+          `A ${fmt(r)} ${fmt(r)} 0 1 ${sweepFlag} ${fmt(p0.x)} ${fmt(p0.y)}`,
+        ].join(' ');
+      }
+
+      const largeArcFlag = sw > 180 ? 1 : 0;
+      return `M ${fmt(p0.x)} ${fmt(p0.y)} A ${fmt(r)} ${fmt(r)} 0 ${largeArcFlag} ${sweepFlag} ${fmt(p1.x)} ${fmt(p1.y)}`;
+    }
+
+    function escapeXml(s) {
+      // Avoid replaceAll() for maximum browser compatibility.
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+    }
+
+    function buildSvg(state) {
+      const w = clamp(num(state.w), 16, 4096);
+      const h = clamp(num(state.h), 16, 4096);
+      const pad = clamp(num(state.pad), 0, 2000);
+
+      const cx = num(state.cx);
+      const cy = num(state.cy);
+      const r = clamp(num(state.r), 1, 100000);
+
+      const start = num(state.start);
+      const sweep = clamp(num(state.sweep), 0, 360);
+      const clockwise = !!state.clockwise;
+
+      const strokeW = clamp(num(state.strokeW), 0, 1000);
+      const linecap = state.linecap || 'round';
+      const strokeColor = state.strokeColor || '#000000';
+      const strokeAlpha = clamp(num(state.strokeAlpha), 0, 1);
+      const hideArc = !!state.hideArc;
+
+      const text = state.text ?? '';
+      const fontFamily = state.fontFamily || defaultState.fontFamily;
+      const fontSize = clamp(num(state.fontSize), 1, 1000);
+      const fontWeight = state.fontWeight || '400';
+      const textColor = state.textColor || '#000000';
+      const textAlpha = clamp(num(state.textAlpha), 0, 1);
+      const textDy = num(state.textDy);
+      const startOffset = clamp(num(state.startOffset), 0, 100);
+      const textAnchor = state.textAnchor || 'middle';
+      const letterSpacing = num(state.letterSpacing);
+      const reverseText = !!state.reverseText;
+
+      const bgMode = state.bgMode || 'none';
+      const bgColor = state.bgColor || '#000000';
+      const bgAlpha = clamp(num(state.bgAlpha), 0, 1);
+      const guides = !!state.guides;
+
+      const d = arcPathD({ cx, cy, r, start, sweep, clockwise });
+
+      const arcStroke = hideArc ? 'none' : strokeColor;
+      const arcStrokeOpacity = hideArc ? 0 : strokeAlpha;
+
+      const textStartOffset = reverseText ? (100 - startOffset) : startOffset;
+      const effectiveAnchor = reverseText
+        ? (textAnchor === 'start' ? 'end' : textAnchor === 'end' ? 'start' : 'middle')
+        : textAnchor;
+
+      const defs = `
+  <defs>
+    <path id="arcPath" d="${d}" />
+  </defs>`;
+
+      const bgRect = (bgMode === 'solid')
+        ? `\n  <rect x="0" y="0" width="${w}" height="${h}" fill="${bgColor}" fill-opacity="${bgAlpha}" />`
+        : '';
+
+      const guideEls = guides ? `
+  <g opacity="0.5">
+    <circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${fmt(r)}" fill="none" stroke="#ffffff" stroke-opacity="0.25" stroke-width="1" />
+    <line x1="0" y1="${fmt(cy)}" x2="${w}" y2="${fmt(cy)}" stroke="#ffffff" stroke-opacity="0.18" stroke-width="1" />
+    <line x1="${fmt(cx)}" y1="0" x2="${fmt(cx)}" y2="${h}" stroke="#ffffff" stroke-opacity="0.18" stroke-width="1" />
+  </g>` : '';
+
+      const arcEl = `
+  <path d="${d}" fill="none" stroke="${arcStroke}" stroke-opacity="${arcStrokeOpacity}" stroke-width="${strokeW}" stroke-linecap="${linecap}" />`;
+
+      // Keep the <path> in <defs> for textPath, and render a stroke separately.
+      // This avoids some edge cases where textPath references a styled path.
+      const textEl = `
+  <text
+    font-family="${escapeXml(fontFamily)}"
+    font-size="${fontSize}"
+    font-weight="${escapeXml(fontWeight)}"
+    fill="${textColor}"
+    fill-opacity="${textAlpha}"
+    letter-spacing="${letterSpacing}"
+    text-anchor="${escapeXml(effectiveAnchor)}"
+    dominant-baseline="middle"
+    ${textDy ? `dy="${fmt(textDy)}"` : ''}
+  >
+    <textPath href="#arcPath" startOffset="${textStartOffset}%">
+      ${escapeXml(text)}
+    </textPath>
+  </text>`;
+
+      const vbX = 0;
+      const vbY = 0;
+      const vbW = w;
+      const vbH = h;
+
+      const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${vbX} ${vbY} ${vbW} ${vbH}">
+${defs}${bgRect}${guideEls}${arcEl}${textEl}
+</svg>`;
+
+      if (!state.pretty) return svg.replace(/\n\s+/g, '\n').trim() + '\n';
+      return svg.trim() + '\n';
+    }
+
+    function readStateFromUrl() {
+      const sp = new URLSearchParams(location.search);
+      const s = { ...defaultState };
+
+      // Keep this list explicit (stable URLs, easy to audit)
+      const fields = [
+        'w','h','pad','cx','cy','r',
+        'bgMode','bgColor','bgAlpha','guides',
+        'start','sweep','clockwise','strokeW','linecap','strokeColor','strokeAlpha','hideArc',
+        'text','fontFamily','fontSize','fontWeight','textColor','textAlpha','textDy','startOffset','textAnchor','letterSpacing','reverseText',
+        'filename','pretty',
+      ];
+
+      for (const k of fields) {
+        if (!sp.has(k)) continue;
+        const v = sp.get(k);
+        if (k === 'guides' || k === 'clockwise' || k === 'hideArc' || k === 'reverseText' || k === 'pretty') {
+          s[k] = v === '1' || v === 'true';
+        } else if (['w','h','pad','cx','cy','r','start','sweep','strokeW','bgAlpha','strokeAlpha','fontSize','textAlpha','textDy','startOffset','letterSpacing'].includes(k)) {
+          s[k] = num(v);
+        } else {
+          s[k] = v;
+        }
+      }
+
+      // If cx/cy weren't set but w/h were, center by default.
+      if (!sp.has('cx')) s.cx = Math.round(s.w / 2);
+      if (!sp.has('cy')) s.cy = Math.round(s.h / 2);
+
+      return s;
+    }
+
+    function writeStateToUrl(state) {
+      const sp = new URLSearchParams();
+
+      const set = (k, v) => {
+        if (typeof v === 'boolean') sp.set(k, v ? '1' : '0');
+        else sp.set(k, String(v));
+      };
+
+      // Include everything so the URL is fully shareable.
+      for (const [k, v] of Object.entries(state)) set(k, v);
+
+      const next = `${location.pathname}?${sp.toString()}`;
+      history.replaceState(null, '', next);
+    }
+
+    function setToast(msg, isError = false) {
+      const el = $('toast');
+      el.textContent = msg;
+      el.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+    }
+
+    function bindForm(state) {
+      const bindNumber = (id, key, { min = -Infinity, max = Infinity } = {}) => {
+        const el = $(id);
+        el.value = state[key];
+        el.addEventListener('input', () => {
+          state[key] = clamp(num(el.value), min, max);
+          render();
+        });
+      };
+
+      const bindText = (id, key) => {
+        const el = $(id);
+        el.value = state[key];
+        el.addEventListener('input', () => {
+          state[key] = el.value;
+          render();
+        });
+      };
+
+      const bindSelect = (id, key) => {
+        const el = $(id);
+        el.value = state[key];
+        el.addEventListener('change', () => {
+          state[key] = el.value;
+          render();
+        });
+      };
+
+      const bindCheck = (id, key) => {
+        const el = $(id);
+        el.checked = !!state[key];
+        el.addEventListener('change', () => {
+          state[key] = el.checked;
+          render();
+        });
+      };
+
+      const bindColor = (id, key) => {
+        const el = $(id);
+        el.value = state[key];
+        el.addEventListener('input', () => {
+          state[key] = el.value;
+          render();
+        });
+      };
+
+      const bindRange = (id, key, labelId) => {
+        const el = $(id);
+        const lab = $(labelId);
+        el.value = state[key];
+        lab.textContent = `(${Number(state[key]).toFixed(2)})`;
+        el.addEventListener('input', () => {
+          state[key] = clamp(num(el.value), 0, 1);
+          lab.textContent = `(${Number(state[key]).toFixed(2)})`;
+          render();
+        });
+      };
+
+      bindNumber('w', 'w', { min: 16, max: 4096 });
+      bindNumber('h', 'h', { min: 16, max: 4096 });
+      bindNumber('pad', 'pad', { min: 0, max: 2000 });
+      bindNumber('cx', 'cx');
+      bindNumber('cy', 'cy');
+      bindNumber('r', 'r', { min: 1, max: 100000 });
+
+      bindSelect('bgMode', 'bgMode');
+      bindColor('bgColor', 'bgColor');
+      bindRange('bgAlpha', 'bgAlpha', 'bgAlphaLabel');
+      bindCheck('guides', 'guides');
+
+      bindNumber('start', 'start');
+      bindNumber('sweep', 'sweep', { min: 0, max: 360 });
+      bindCheck('clockwise', 'clockwise');
+      bindNumber('strokeW', 'strokeW', { min: 0, max: 1000 });
+      bindSelect('linecap', 'linecap');
+      bindColor('strokeColor', 'strokeColor');
+      bindRange('strokeAlpha', 'strokeAlpha', 'strokeAlphaLabel');
+      bindCheck('hideArc', 'hideArc');
+
+      bindText('text', 'text');
+      bindText('fontFamily', 'fontFamily');
+      bindNumber('fontSize', 'fontSize', { min: 1, max: 1000 });
+      bindSelect('fontWeight', 'fontWeight');
+      bindColor('textColor', 'textColor');
+      bindRange('textAlpha', 'textAlpha', 'textAlphaLabel');
+      bindNumber('textDy', 'textDy');
+      bindNumber('startOffset', 'startOffset', { min: 0, max: 100 });
+      bindSelect('textAnchor', 'textAnchor');
+      bindNumber('letterSpacing', 'letterSpacing');
+      bindCheck('reverseText', 'reverseText');
+
+      bindText('filename', 'filename');
+      bindCheck('pretty', 'pretty');
+    }
+
+    let state = readStateFromUrl();
+
+    function syncFormFromState() {
+      // Set inputs without adding duplicate listeners (useful for Reset).
+      const setV = (id, v) => { $(id).value = v; };
+      const setC = (id, v) => { $(id).checked = !!v; };
+      const setAlpha = (id, labelId, v) => {
+        $(id).value = v;
+        $(labelId).textContent = `(${Number(v).toFixed(2)})`;
+      };
+
+      setV('w', state.w);
+      setV('h', state.h);
+      setV('pad', state.pad);
+      setV('cx', state.cx);
+      setV('cy', state.cy);
+      setV('r', state.r);
+
+      setV('bgMode', state.bgMode);
+      setV('bgColor', state.bgColor);
+      setAlpha('bgAlpha', 'bgAlphaLabel', state.bgAlpha);
+      setC('guides', state.guides);
+
+      setV('start', state.start);
+      setV('sweep', state.sweep);
+      setC('clockwise', state.clockwise);
+      setV('strokeW', state.strokeW);
+      setV('linecap', state.linecap);
+      setV('strokeColor', state.strokeColor);
+      setAlpha('strokeAlpha', 'strokeAlphaLabel', state.strokeAlpha);
+      setC('hideArc', state.hideArc);
+
+      setV('text', state.text);
+      setV('fontFamily', state.fontFamily);
+      setV('fontSize', state.fontSize);
+      setV('fontWeight', state.fontWeight);
+      setV('textColor', state.textColor);
+      setAlpha('textAlpha', 'textAlphaLabel', state.textAlpha);
+      setV('textDy', state.textDy);
+      setV('startOffset', state.startOffset);
+      setV('textAnchor', state.textAnchor);
+      setV('letterSpacing', state.letterSpacing);
+      setC('reverseText', state.reverseText);
+
+      setV('filename', state.filename);
+      setC('pretty', state.pretty);
+    }
+
+    function render() {
+      // Auto-center if the user changes size and center matches the old center.
+      // (We keep this conservative: only if cx/cy equals prior centered values.)
+      // Also update radius if it would exceed canvas minus padding.
+      const w = clamp(num(state.w), 16, 4096);
+      const h = clamp(num(state.h), 16, 4096);
+      state.w = w;
+      state.h = h;
+      state.pad = clamp(num(state.pad), 0, 2000);
+
+      const maxR = Math.max(1, Math.min((w / 2) - state.pad, (h / 2) - state.pad));
+      state.r = clamp(num(state.r), 1, Math.max(1, maxR));
+
+      // Keep center in bounds-ish (allow off-canvas if desired, but default to centered)
+      if (!Number.isFinite(num(state.cx))) state.cx = Math.round(w / 2);
+      if (!Number.isFinite(num(state.cy))) state.cy = Math.round(h / 2);
+
+      const svg = buildSvg(state);
+      // The XML declaration is useful for export, but can render as text in HTML previews.
+      const svgForPreview = svg.replace(/^\s*<\?xml[^>]*>\s*/i, '');
+      $('preview').innerHTML = svgForPreview;
+      $('out').value = svg;
+
+      writeStateToUrl(state);
+      setToast('');
+    }
+
+    async function copySvg() {
+      try {
+        await navigator.clipboard.writeText($('out').value);
+        setToast('Copied SVG to clipboard.');
+      } catch (e) {
+        // Fallback: select text
+        const ta = $('out');
+        ta.focus();
+        ta.select();
+        setToast('Clipboard blocked by browser. SVG selected—copy manually.', true);
+      }
+    }
+
+    function downloadSvg() {
+      const name = (state.filename || 'arc-text.svg').trim() || 'arc-text.svg';
+      const blob = new Blob([$('out').value], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name.endsWith('.svg') ? name : `${name}.svg`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setToast(`Downloaded ${a.download}.`);
+    }
+
+    function resetAll() {
+      state = { ...defaultState };
+      syncFormFromState();
+      render();
+      setToast('Reset to defaults.');
+    }
+
+    $('btnCopy').addEventListener('click', copySvg);
+    $('btnDownload').addEventListener('click', downloadSvg);
+    $('btnReset').addEventListener('click', resetAll);
+
+    // Initial bind + render
+    bindForm(state);
+    render();
+
+    // UX: Ctrl/Cmd+Enter to copy
+    $('out').addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') copySvg();
+    });
+  </script>
+</body>
+</html>
