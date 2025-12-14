@@ -5,7 +5,9 @@ const path = require('path');
 
 const ROOT_DIR = path.join(__dirname, '..');
 const INDEX_PATH = path.join(ROOT_DIR, 'index.html');
-const BASE_URL = '/HtmlTools/';
+const BASE_URL = '/';
+const DESCRIPTION_REGEX =
+  /<meta[^>]*\bname=["']description["'][^>]*\bcontent=["']([^"']*)["'][^>]*>/i;
 
 /**
  * Discover all tools in the root directory
@@ -50,10 +52,35 @@ function generateToolsHtml(tools) {
   return tools
     .map(tool => {
       const displayName = filenameToDisplayName(tool);
+      const description = getDescriptionForTool(tool);
       const url = `${BASE_URL}${tool}`;
-      return `            <li><a href="${url}">${displayName}</a></li>`;
+      const descSuffix = description
+        ? ` <span aria-label="description">— ${escapeHtml(description)}</span>`
+        : '';
+      return `            <li><a href="${url}">${displayName}</a>${descSuffix}</li>`;
     })
     .join('\n');
+}
+
+function getDescriptionForTool(filename) {
+  const filePath = path.join(ROOT_DIR, filename);
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const match = content.match(DESCRIPTION_REGEX);
+    return match ? match[1].trim() : '';
+  } catch (error) {
+    console.warn(`Warning: could not read description for ${filename}: ${error.message}`);
+    return '';
+  }
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /**
