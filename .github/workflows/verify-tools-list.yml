@@ -1,0 +1,38 @@
+name: Verify Tools List
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  verify-tools-list:
+    name: Verify tools list is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Run tools list update script
+        run: node scripts/update-tools-list.js
+
+      - name: Check for changes
+        run: |
+          if git diff --quiet index.html; then
+            echo "✓ Tools list is up to date"
+            exit 0
+          else
+            echo "✗ Tools list is out of date!"
+            echo ""
+            echo "Changes needed:"
+            git diff index.html
+            echo ""
+            echo "Please run 'node scripts/update-tools-list.js' and commit the changes."
+            exit 1
+          fi

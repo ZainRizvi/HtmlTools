@@ -1,10 +1,12 @@
 # Agent guide for this repo (HTML tools)
 
-This repository is for **single-file “HTML tools”**: useful little web apps that combine **HTML + CSS + JavaScript in one `.html` file** and can be hosted as static files (eventually as a GitHub Pages site).
+This repository is for **single-file "HTML tools"**: useful little web apps that combine **HTML + CSS + JavaScript in one `.html` file** and can be hosted as static files (eventually as a GitHub Pages site).
 
-These guidelines are based on Simon Willison’s post **“Useful patterns for building HTML tools”**: [Useful patterns for building HTML tools](https://simonwillison.net/2025/Dec/10/html-tools/)
+These guidelines are based on Simon Willison's post **"Useful patterns for building HTML tools"**: [Useful patterns for building HTML tools](https://simonwillison.net/2025/Dec/10/html-tools/)
 
-## What we mean by “HTML tool”
+**Note:** Keep this file in sync with `/Users/zain/.claude/CLAUDE.md`. If either file is updated with policies or conventions, copy the more recent version over the older one to maintain consistency.
+
+## What we mean by "HTML tool"
 
 An HTML tool is:
 
@@ -12,6 +14,10 @@ An HTML tool is:
 - **No build step**: no bundlers, no JSX compilation.
 - **Small**: ideally a few hundred lines; easy to rewrite/refactor with an LLM.
 - **Static-hostable**: should work from GitHub Pages or any static host.
+
+## Tool definition
+
+A **Tool** is defined as any HTML file in the root directory of the repository that is not `index.html`. Each tool represents a standalone, single-file web application that can be discovered and listed on the site homepage.
 
 ## Non-negotiables for agents
 
@@ -92,6 +98,23 @@ If you do add shared code:
   - Pyodide can run Python in-browser and load pure-Python packages via `micropip`.
   - WebAssembly can unlock heavy tooling (OCR, codecs, etc.)—but mind download size and UX.
 
+## Maintaining the tools list
+
+The `index.html` homepage automatically lists all available tools. This list is kept in sync via a script (`scripts/update-tools-list.js`).
+
+**Before committing any changes that add, remove, or rename tools:**
+
+1. Run the tool discovery script:
+   ```bash
+   node scripts/update-tools-list.js
+   ```
+
+2. Verify that `index.html` has been updated with the correct tools list.
+
+3. Commit the updated `index.html` along with your tool changes.
+
+A git pre-commit hook can be installed to automate this check. See the setup instructions in `scripts/install-pre-commit-hook.js`.
+
 ## Record prompts and provenance
 
 When an agent creates or substantially modifies a tool:
@@ -100,7 +123,7 @@ When an agent creates or substantially modifies a tool:
   - Add an HTML comment near the top with a short description and (if available) a link to the prompt/transcript.
   - If work was done via an agent session, include the transcript link in the eventual PR/commit message (when applicable).
 
-- **Add a “View source” link** (recommended):
+- **Add a "View source" link** (recommended):
   - Include a footer link pointing to the file in this GitHub repo.
 
 ## Quality bar
