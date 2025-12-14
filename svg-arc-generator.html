@@ -354,7 +354,22 @@
             padding: 40px;
         }
 
+        .svg-stage {
+            position: relative;
+            display: inline-block;
+        }
+
+        #svgGridOverlay {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
         #svgCanvas {
+            position: relative;
+            display: block;
             filter: drop-shadow(0 4px 20px rgba(0, 217, 255, 0.15));
         }
 
@@ -628,7 +643,10 @@
 
         <div class="preview">
             <div class="preview-area">
-                <svg id="svgCanvas"></svg>
+                <div class="svg-stage">
+                    <svg id="svgGridOverlay" aria-hidden="true"></svg>
+                    <svg id="svgCanvas"></svg>
+                </div>
             </div>
 
             <div class="code-panel">
@@ -891,13 +909,12 @@
     </script>
 
     <!-- MODULE: SVG Canvas Grid & Coordinates
-         Adds a visual grid and coordinate system to an SVG canvas.
-         Useful for debugging, education, and showing precise positioning.
+         Creates a visual grid and coordinate system group for an SVG canvas.
+         Useful for debugging, education, and showing precise positioning as an overlay.
     -->
     <script>
         /**
-         * Add grid lines and coordinate labels to an SVG element
-         * @param {SVGElement} svg - The SVG element to add the grid to
+         * Create grid lines and coordinate labels sized to a canvas
          * @param {number} width - Canvas width
          * @param {number} height - Canvas height
          * @param {Object} options - Styling and configuration options
@@ -911,7 +928,7 @@
          * @param {boolean} options.showLabels - Whether to show coordinate labels (default: true)
          * @returns {SVGGElement} The group element containing all grid/coordinate elements
          */
-        function addSVGCanvasGrid(svg, width, height, options = {}) {
+        function addSVGCanvasGrid(width, height, options = {}) {
             const {
                 gridSpacing = 50,
                 gridColor = 'rgba(0, 217, 255, 0.08)',
@@ -1026,6 +1043,8 @@
     -->
     <script>
         // Gather all control elements
+        const svgCanvas = document.getElementById('svgCanvas');
+        const svgGridOverlay = document.getElementById('svgGridOverlay');
         const controls = {
             canvasWidth: document.getElementById('canvasWidth'),
             canvasHeight: document.getElementById('canvasHeight'),
@@ -1106,7 +1125,6 @@
 
         // Main SVG rendering function
         function updateSVG() {
-            const svg = document.getElementById('svgCanvas');
             const width = parseInt(controls.canvasWidth.value);
             const height = parseInt(controls.canvasHeight.value);
             const cx = parseInt(controls.arcCenterX.value);
@@ -1126,18 +1144,25 @@
             const textColor = controls.textColor.value;
             const textOffset = parseInt(controls.textOffset.value);
 
-            svg.setAttribute('width', width);
-            svg.setAttribute('height', height);
-            svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+            svgCanvas.setAttribute('width', width);
+            svgCanvas.setAttribute('height', height);
+            svgCanvas.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+            svgGridOverlay.setAttribute('width', width);
+            svgGridOverlay.setAttribute('height', height);
 
             // Clear previous content
-            while (svg.firstChild) {
-                svg.removeChild(svg.firstChild);
+            while (svgCanvas.firstChild) {
+                svgCanvas.removeChild(svgCanvas.firstChild);
             }
 
-            // Add grid and coordinate system (using the SVG Canvas Grid module)
-            const gridGroup = addSVGCanvasGrid(svg, width, height);
-            svg.appendChild(gridGroup);
+            while (svgGridOverlay.firstChild) {
+                svgGridOverlay.removeChild(svgGridOverlay.firstChild);
+            }
+
+            // Add grid and coordinate system to the overlay (UI only, not exported)
+            const gridGroup = addSVGCanvasGrid(width, height);
+            svgGridOverlay.appendChild(gridGroup);
 
             const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
 
@@ -1150,7 +1175,7 @@
                 arcPath.setAttribute('fill', fillColor);
                 arcPath.setAttribute('stroke', strokeColor);
                 arcPath.setAttribute('stroke-width', strokeWidth);
-                svg.appendChild(arcPath);
+                svgCanvas.appendChild(arcPath);
             } else {
                 const arcPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const pathData = describeArc(cx, cy, outerRadius, startAngle, endAngle);
@@ -1159,7 +1184,7 @@
                 arcPath.setAttribute('fill', 'none');
                 arcPath.setAttribute('stroke', strokeColor);
                 arcPath.setAttribute('stroke-width', strokeWidth);
-                svg.appendChild(arcPath);
+                svgCanvas.appendChild(arcPath);
             }
 
             // Create text path (for curved text along the arc)
@@ -1171,7 +1196,7 @@
             textPath.setAttribute('fill', 'none');
 
             defs.appendChild(textPath);
-            svg.insertBefore(defs, svg.firstChild);
+            svgCanvas.insertBefore(defs, svgCanvas.firstChild);
 
             // Add curved text if content exists
             if (textContent) {
@@ -1188,7 +1213,7 @@
                 textPathElement.textContent = textContent;
 
                 text.appendChild(textPathElement);
-                svg.appendChild(text);
+                svgCanvas.appendChild(text);
             }
 
             updateCodeDisplay();
@@ -1196,9 +1221,8 @@
 
         // Update the code display panel
         function updateCodeDisplay() {
-            const svg = document.getElementById('svgCanvas');
             const serializer = new XMLSerializer();
-            let svgString = serializer.serializeToString(svg);
+            let svgString = serializer.serializeToString(svgCanvas);
 
             svgString = svgString
                 .replace(/></g, '>\n<')
@@ -1217,9 +1241,8 @@
 
         // Download SVG file (using the downloadFile module)
         function downloadSVG() {
-            const svg = document.getElementById('svgCanvas');
             const serializer = new XMLSerializer();
-            const svgString = serializer.serializeToString(svg);
+            const svgString = serializer.serializeToString(svgCanvas);
 
             downloadFile(
                 svgString,
