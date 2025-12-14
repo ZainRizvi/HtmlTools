@@ -1,0 +1,8 @@
+# Local settings (personal/machine-specific)
+.claude/settings.local.json
+
+# Backup files
+*.backup
+
+# OS files
+.DS_Store
