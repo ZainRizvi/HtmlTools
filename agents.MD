@@ -21,7 +21,8 @@ An HTML tool is:
 - **Dependencies**:
   - Prefer **version-pinned CDN URLs** (e.g. cdnjs/jsDelivr) for third-party libraries.
   - You may use **repo-local shared JavaScript** from `lib/` when it meaningfully reduces duplication across tools (see below).
-- **Don’t bake secrets into the file**: never hardcode API keys or tokens.
+- **Don't bake secrets into the file**: never hardcode API keys or tokens.
+- **Never share CSS**: do not create shared CSS files or libraries. If you want to match styles across tools, always copy-paste the CSS directly into each tool's `<style>` block.
 
 ## Recommended repo structure
 
