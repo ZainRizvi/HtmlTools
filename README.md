@@ -38,6 +38,11 @@ You can open a tool directly in your browser, but some features (fetch/CORS) beh
 npx serve .
 ```
 
+## Available Tools
+
+- **[SVG Arc & Curved Text Generator](svg-arc-generator.html)** — Generate SVG arcs and curved text paths with interactive controls
+- **[SVG Pan & Rotate Tool](svg-transformer.html)** — Upload SVG files and pan, zoom, and rotate them interactively
+
 ## Status
 
 This repository is currently minimal and will grow into a browsable collection as tools are added and GitHub Pages is configured.
