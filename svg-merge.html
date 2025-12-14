@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG Merge Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .description {
+            color: #666;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .upload-section {
+            margin-bottom: 30px;
+        }
+
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            background: #fafafa;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-area.dragover {
+            border-color: #4CAF50;
+            background: #f0f8f0;
+        }
+
+        .upload-area input[type="file"] {
+            display: none;
+        }
+
+        .paste-area {
+            margin-top: 15px;
+        }
+
+        .paste-area textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .paste-btn {
+            margin-top: 10px;
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .paste-btn:hover {
+            background: #45a049;
+        }
+
+        .svgs-list {
+            margin-bottom: 30px;
+        }
+
+        .svg-item {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background: #fafafa;
+        }
+
+        .svg-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .svg-item-title {
+            font-weight: 600;
+            color: #333;
+            font-size: 16px;
+        }
+
+        .remove-btn {
+            padding: 6px 12px;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .remove-btn:hover {
+            background: #d32f2f;
+        }
+
+        .svg-preview {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 20px;
+            background: #fff;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: auto;
+            margin-bottom: 15px;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .control-group label {
+            margin-bottom: 5px;
+            color: #666;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .control-group input[type="number"] {
+            padding: 6px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+        }
+
+        .slider-value {
+            text-align: center;
+            margin-top: 5px;
+            font-family: monospace;
+            color: #333;
+            font-size: 12px;
+        }
+
+        .merge-section {
+            margin: 30px 0;
+            text-align: center;
+        }
+
+        .merge-btn {
+            padding: 15px 40px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .merge-btn:hover {
+            background: #1976D2;
+        }
+
+        .merge-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .result-section {
+            display: none;
+            margin-top: 30px;
+        }
+
+        .result-section.active {
+            display: block;
+        }
+
+        .result-section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        .result-preview {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 30px;
+            background: #fff;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: auto;
+            margin-bottom: 20px;
+        }
+
+        .export-section {
+            background: #f0f8ff;
+            padding: 20px;
+            border-radius: 4px;
+            border: 1px solid #b3d9ff;
+        }
+
+        .export-section h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 18px;
+        }
+
+        #svgOutput {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid #b3d9ff;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            background: white;
+            margin-bottom: 15px;
+            resize: vertical;
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .export-btn {
+            padding: 12px 24px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        .export-btn:hover {
+            background: #1976D2;
+        }
+
+        .export-btn.success {
+            background: #4CAF50;
+        }
+
+        .export-btn.success:hover {
+            background: #45a049;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        @media (max-width: 768px) {
+            .controls-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .export-buttons {
+                flex-direction: column;
+            }
+
+            .export-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SVG Merge Tool</h1>
+        <p class="description">Upload or paste two or more SVG files, adjust their position and rotation individually, then merge them into a single SVG.</p>
+
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <input type="file" id="fileInput" accept=".svg" multiple>
+                <p>📁 Click to upload SVG files or drag & drop here (multiple files allowed)</p>
+            </div>
+
+            <div class="paste-area">
+                <label for="svgPaste" style="display: block; margin-bottom: 5px; color: #666;">Or paste SVG code:</label>
+                <textarea id="svgPaste" placeholder="Paste your SVG XML code here..."></textarea>
+                <button class="paste-btn" id="pasteBtn">Add SVG</button>
+            </div>
+        </div>
+
+        <div class="svgs-list" id="svgsList">
+            <div class="empty-state">No SVGs loaded yet. Upload or paste SVG files above.</div>
+        </div>
+
+        <div class="merge-section">
+            <button class="merge-btn" id="mergeBtn" disabled>Merge SVGs</button>
+        </div>
+
+        <div class="result-section" id="resultSection">
+            <h2>Merged Result</h2>
+            <div class="result-preview" id="resultPreview">
+                <!-- Merged SVG will be rendered here -->
+            </div>
+
+            <div class="export-section">
+                <h3>Export Merged SVG</h3>
+                <textarea id="svgOutput" readonly></textarea>
+                <div class="export-buttons">
+                    <button class="export-btn" id="copySvgBtn">📋 Copy SVG to Clipboard</button>
+                    <button class="export-btn" id="downloadSvgBtn">💾 Download SVG</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let svgItems = [];
+        let nextId = 1;
+
+        // DOM elements
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const svgPaste = document.getElementById('svgPaste');
+        const pasteBtn = document.getElementById('pasteBtn');
+        const svgsList = document.getElementById('svgsList');
+        const mergeBtn = document.getElementById('mergeBtn');
+        const resultSection = document.getElementById('resultSection');
+        const resultPreview = document.getElementById('resultPreview');
+        const svgOutput = document.getElementById('svgOutput');
+        const copySvgBtn = document.getElementById('copySvgBtn');
+        const downloadSvgBtn = document.getElementById('downloadSvgBtn');
+
+        // Upload area click
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            files.forEach(file => {
+                if (file && file.type === 'image/svg+xml') {
+                    const reader = new FileReader();
+                    reader.onload = (e) => addSvg(e.target.result);
+                    reader.readAsText(file);
+                }
+            });
+            fileInput.value = ''; // Reset input
+        });
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+
+            const files = Array.from(e.dataTransfer.files);
+            files.forEach(file => {
+                if (file && file.type === 'image/svg+xml') {
+                    const reader = new FileReader();
+                    reader.onload = (e) => addSvg(e.target.result);
+                    reader.readAsText(file);
+                }
+            });
+        });
+
+        // Paste button
+        pasteBtn.addEventListener('click', () => {
+            const svgCode = svgPaste.value.trim();
+            if (svgCode) {
+                addSvg(svgCode);
+                svgPaste.value = '';
+            }
+        });
+
+        // Add SVG to the list
+        function addSvg(svgString) {
+            try {
+                // Parse SVG
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(svgString, 'image/svg+xml');
+                const parsedSvg = doc.querySelector('svg');
+
+                if (!parsedSvg) {
+                    alert('Invalid SVG content');
+                    return;
+                }
+
+                const id = nextId++;
+                const item = {
+                    id: id,
+                    svgString: svgString,
+                    panX: 0,
+                    panY: 0,
+                    rotation: 0,
+                    centerX: 0,
+                    centerY: 0
+                };
+
+                svgItems.push(item);
+                renderSvgItems();
+                updateMergeButton();
+
+                // Initialize the SVG after rendering
+                setTimeout(() => initializeSvgItem(item), 10);
+
+            } catch (error) {
+                console.error('Error loading SVG:', error);
+                alert('Error loading SVG: ' + error.message);
+            }
+        }
+
+        // Initialize SVG item (calculate center)
+        function initializeSvgItem(item) {
+            const container = document.getElementById(`svg-preview-${item.id}`);
+            if (!container) return;
+
+            const svgElement = container.querySelector('svg');
+            if (!svgElement) return;
+
+            try {
+                const bbox = svgElement.getBBox();
+                item.centerX = bbox.x + bbox.width / 2;
+                item.centerY = bbox.y + bbox.height / 2;
+
+                // Update center inputs
+                const centerXInput = document.getElementById(`centerX-${item.id}`);
+                const centerYInput = document.getElementById(`centerY-${item.id}`);
+                if (centerXInput && centerYInput) {
+                    centerXInput.value = item.centerX.toFixed(2);
+                    centerYInput.value = item.centerY.toFixed(2);
+                }
+            } catch (error) {
+                console.warn('Could not get bbox for SVG:', error);
+            }
+        }
+
+        // Render all SVG items
+        function renderSvgItems() {
+            if (svgItems.length === 0) {
+                svgsList.innerHTML = '<div class="empty-state">No SVGs loaded yet. Upload or paste SVG files above.</div>';
+                return;
+            }
+
+            svgsList.innerHTML = svgItems.map(item => `
+                <div class="svg-item" id="svg-item-${item.id}">
+                    <div class="svg-item-header">
+                        <div class="svg-item-title">SVG ${item.id}</div>
+                        <button class="remove-btn" onclick="removeSvg(${item.id})">Remove</button>
+                    </div>
+                    <div class="svg-preview" id="svg-preview-${item.id}">
+                        <!-- SVG will be rendered here -->
+                    </div>
+                    <div class="controls-grid">
+                        <div class="control-group">
+                            <label for="panX-${item.id}">Pan X:</label>
+                            <input type="number" id="panX-${item.id}" value="${item.panX}" step="1" onchange="updateSvgTransform(${item.id})">
+                        </div>
+                        <div class="control-group">
+                            <label for="panY-${item.id}">Pan Y:</label>
+                            <input type="number" id="panY-${item.id}" value="${item.panY}" step="1" onchange="updateSvgTransform(${item.id})">
+                        </div>
+                        <div class="control-group">
+                            <label for="rotation-${item.id}">Rotation (degrees):</label>
+                            <input type="range" id="rotation-${item.id}" min="-180" max="180" value="${item.rotation}" step="1" oninput="updateSvgTransform(${item.id})">
+                            <div class="slider-value"><span id="rotationValue-${item.id}">${item.rotation}</span>°</div>
+                        </div>
+                        <div class="control-group">
+                            <label for="centerX-${item.id}">Rotation Center X:</label>
+                            <input type="number" id="centerX-${item.id}" value="${item.centerX}" step="0.1" onchange="updateSvgTransform(${item.id})">
+                        </div>
+                        <div class="control-group">
+                            <label for="centerY-${item.id}">Rotation Center Y:</label>
+                            <input type="number" id="centerY-${item.id}" value="${item.centerY}" step="0.1" onchange="updateSvgTransform(${item.id})">
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Render SVGs in their containers
+            svgItems.forEach(item => {
+                const container = document.getElementById(`svg-preview-${item.id}`);
+                if (container) {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(item.svgString, 'image/svg+xml');
+                    const svgElement = doc.querySelector('svg');
+                    if (svgElement) {
+                        container.innerHTML = '';
+                        container.appendChild(svgElement.cloneNode(true));
+                        updateSvgTransform(item.id);
+                    }
+                }
+            });
+        }
+
+        // Update SVG transform
+        function updateSvgTransform(id) {
+            const item = svgItems.find(i => i.id === id);
+            if (!item) return;
+
+            // Get values from inputs
+            const panXInput = document.getElementById(`panX-${id}`);
+            const panYInput = document.getElementById(`panY-${id}`);
+            const rotationInput = document.getElementById(`rotation-${id}`);
+            const centerXInput = document.getElementById(`centerX-${id}`);
+            const centerYInput = document.getElementById(`centerY-${id}`);
+            const rotationValueSpan = document.getElementById(`rotationValue-${id}`);
+
+            if (!panXInput || !panYInput || !rotationInput) return;
+
+            item.panX = parseFloat(panXInput.value) || 0;
+            item.panY = parseFloat(panYInput.value) || 0;
+            item.rotation = parseFloat(rotationInput.value) || 0;
+            item.centerX = parseFloat(centerXInput.value) || 0;
+            item.centerY = parseFloat(centerYInput.value) || 0;
+
+            if (rotationValueSpan) {
+                rotationValueSpan.textContent = item.rotation;
+            }
+
+            // Apply transform to SVG
+            const container = document.getElementById(`svg-preview-${id}`);
+            if (!container) return;
+
+            const svgElement = container.querySelector('svg');
+            if (!svgElement) return;
+
+            let transform = '';
+
+            if (item.panX !== 0 || item.panY !== 0) {
+                transform += `translate(${item.panX}, ${item.panY}) `;
+            }
+
+            if (item.rotation !== 0) {
+                transform += `rotate(${item.rotation}, ${item.centerX}, ${item.centerY})`;
+            }
+
+            // Apply transform to all direct children of SVG
+            const children = svgElement.children;
+            for (let child of children) {
+                if (transform) {
+                    child.setAttribute('transform', transform);
+                } else {
+                    child.removeAttribute('transform');
+                }
+            }
+        }
+
+        // Remove SVG
+        function removeSvg(id) {
+            svgItems = svgItems.filter(item => item.id !== id);
+            renderSvgItems();
+            updateMergeButton();
+            resultSection.classList.remove('active');
+        }
+
+        // Update merge button state
+        function updateMergeButton() {
+            mergeBtn.disabled = svgItems.length < 2;
+        }
+
+        // Merge SVGs
+        mergeBtn.addEventListener('click', () => {
+            if (svgItems.length < 2) {
+                alert('Please add at least 2 SVG files to merge');
+                return;
+            }
+
+            try {
+                // Create a new SVG element
+                const mergedSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                mergedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+                // Calculate bounding box of all SVGs combined
+                let minX = Infinity, minY = Infinity;
+                let maxX = -Infinity, maxY = -Infinity;
+
+                // Collect all transformed elements
+                const allElements = [];
+
+                svgItems.forEach(item => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(item.svgString, 'image/svg+xml');
+                    const svgElement = doc.querySelector('svg');
+
+                    if (svgElement) {
+                        // Get all children and clone them
+                        Array.from(svgElement.children).forEach(child => {
+                            const clonedChild = child.cloneNode(true);
+
+                            // Apply the transformations
+                            let transform = '';
+
+                            if (item.panX !== 0 || item.panY !== 0) {
+                                transform += `translate(${item.panX}, ${item.panY}) `;
+                            }
+
+                            if (item.rotation !== 0) {
+                                transform += `rotate(${item.rotation}, ${item.centerX}, ${item.centerY})`;
+                            }
+
+                            if (transform) {
+                                clonedChild.setAttribute('transform', transform);
+                            }
+
+                            allElements.push(clonedChild);
+                        });
+                    }
+                });
+
+                // Add all elements to merged SVG
+                allElements.forEach(element => {
+                    mergedSvg.appendChild(element);
+                });
+
+                // Temporarily add to DOM to calculate bbox
+                const tempContainer = document.createElement('div');
+                tempContainer.style.position = 'absolute';
+                tempContainer.style.visibility = 'hidden';
+                tempContainer.appendChild(mergedSvg);
+                document.body.appendChild(tempContainer);
+
+                try {
+                    const bbox = mergedSvg.getBBox();
+                    minX = bbox.x;
+                    minY = bbox.y;
+                    maxX = bbox.x + bbox.width;
+                    maxY = bbox.y + bbox.height;
+                } catch (error) {
+                    console.warn('Could not calculate bbox, using default viewBox');
+                    minX = 0;
+                    minY = 0;
+                    maxX = 800;
+                    maxY = 600;
+                }
+
+                document.body.removeChild(tempContainer);
+
+                // Set viewBox and dimensions
+                const width = maxX - minX;
+                const height = maxY - minY;
+                mergedSvg.setAttribute('viewBox', `${minX} ${minY} ${width} ${height}`);
+                mergedSvg.setAttribute('width', width);
+                mergedSvg.setAttribute('height', height);
+
+                // Display result
+                resultPreview.innerHTML = '';
+                resultPreview.appendChild(mergedSvg.cloneNode(true));
+
+                // Get SVG string
+                const serializer = new XMLSerializer();
+                const svgString = serializer.serializeToString(mergedSvg);
+                svgOutput.value = svgString;
+
+                // Show result section
+                resultSection.classList.add('active');
+
+                // Scroll to result
+                resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            } catch (error) {
+                console.error('Error merging SVGs:', error);
+                alert('Error merging SVGs: ' + error.message);
+            }
+        });
+
+        // Copy SVG to clipboard
+        copySvgBtn.addEventListener('click', async () => {
+            const svgString = svgOutput.value;
+            if (!svgString) {
+                alert('No merged SVG available');
+                return;
+            }
+
+            try {
+                await navigator.clipboard.writeText(svgString);
+
+                // Visual feedback
+                const originalText = copySvgBtn.textContent;
+                copySvgBtn.textContent = '✓ Copied!';
+                copySvgBtn.classList.add('success');
+
+                setTimeout(() => {
+                    copySvgBtn.textContent = originalText;
+                    copySvgBtn.classList.remove('success');
+                }, 2000);
+
+            } catch (error) {
+                // Fallback for older browsers
+                svgOutput.select();
+
+                try {
+                    document.execCommand('copy');
+
+                    const originalText = copySvgBtn.textContent;
+                    copySvgBtn.textContent = '✓ Copied!';
+                    copySvgBtn.classList.add('success');
+
+                    setTimeout(() => {
+                        copySvgBtn.textContent = originalText;
+                        copySvgBtn.classList.remove('success');
+                    }, 2000);
+                } catch (err) {
+                    alert('Failed to copy to clipboard');
+                }
+            }
+        });
+
+        // Download SVG
+        downloadSvgBtn.addEventListener('click', () => {
+            const svgString = svgOutput.value;
+            if (!svgString) {
+                alert('No merged SVG available');
+                return;
+            }
+
+            // Create blob
+            const blob = new Blob([svgString], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+
+            // Create download link
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'merged-svg.svg';
+            document.body.appendChild(a);
+            a.click();
+
+            // Cleanup
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            // Visual feedback
+            const originalText = downloadSvgBtn.textContent;
+            downloadSvgBtn.textContent = '✓ Downloaded!';
+            downloadSvgBtn.classList.add('success');
+
+            setTimeout(() => {
+                downloadSvgBtn.textContent = originalText;
+                downloadSvgBtn.classList.remove('success');
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
