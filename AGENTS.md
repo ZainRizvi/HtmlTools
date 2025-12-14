@@ -97,8 +97,9 @@ If you do add shared code:
 
 1. Create a new `.html` file in the root directory with a descriptive kebab-case name (e.g., `my-tool.html`)
 2. Build the tool as a single HTML file with embedded `<style>` and `<script>` tags
-3. Run `node scripts/update-tools-list.js` to update the homepage
-4. Commit both your tool and the updated `index.html`
+3. Add a `<meta name="description" content="...">` tag in the `<head>` with a single sentence describing what the tool does
+4. Run `node scripts/update-tools-list.js` to update the homepage
+5. Commit both your tool and the updated `index.html`
 
 ## Maintaining the tools list
 
@@ -152,4 +153,4 @@ Use this when fetch/CORS behavior differs between `file://` and `http://`.
 
 ## Sync note
 
-This file (`CLAUDE.md`) should be kept identical to `agents.md` in this repo. Different AI systems read one vs. the other. If either file is updated, copy the contents to the other to maintain consistency.
+This file (`AGENTS.md`) should be kept identical to `CLAUDE.md` in this repo. Different AI systems read one vs. the other. If either file is updated, copy the contents to the other to maintain consistency.
