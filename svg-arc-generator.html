@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG Arc & Curved Text Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            height: fit-content;
+        }
+
+        .preview {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        h2 {
+            font-size: 18px;
+            margin: 20px 0 10px 0;
+            color: #555;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 5px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        input[type="number"],
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        input[type="color"] {
+            width: 100%;
+            height: 40px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        input[type="range"] {
+            width: 100%;
+        }
+
+        .color-group {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        #svgPreview {
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            background: 
+                repeating-conic-gradient(#f0f0f0 0% 25%, white 0% 50%) 
+                50% / 20px 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 400px;
+        }
+
+        #svgCanvas {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .code-output {
+            background: #f8f8f8;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .value-display {
+            display: inline-block;
+            margin-left: 10px;
+            color: #007bff;
+            font-weight: 600;
+        }
+
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="controls">
+            <h1>SVG Arc Generator</h1>
+            
+            <h2>Canvas Size</h2>
+            <div class="control-group">
+                <label>Width (px)</label>
+                <input type="number" id="canvasWidth" value="500" min="100" max="2000">
+            </div>
+            <div class="control-group">
+                <label>Height (px)</label>
+                <input type="number" id="canvasHeight" value="500" min="100" max="2000">
+            </div>
+
+            <h2>Arc Settings</h2>
+            <div class="control-group">
+                <label>Center X</label>
+                <input type="number" id="arcCenterX" value="250" min="0">
+            </div>
+            <div class="control-group">
+                <label>Center Y</label>
+                <input type="number" id="arcCenterY" value="250" min="0">
+            </div>
+            <div class="control-group">
+                <label>Outer Radius</label>
+                <input type="number" id="arcRadius" value="150" min="10" max="1000">
+            </div>
+            <div class="control-group">
+                <label>Thickness (0 = simple arc)</label>
+                <input type="number" id="arcThickness" value="0" min="0" max="500">
+            </div>
+            <div class="control-group">
+                <label>Start Angle (degrees) <span class="value-display" id="startAngleVal">0°</span></label>
+                <input type="range" id="arcStartAngle" value="0" min="0" max="360" step="1">
+            </div>
+            <div class="control-group">
+                <label>End Angle (degrees) <span class="value-display" id="endAngleVal">180°</span></label>
+                <input type="range" id="arcEndAngle" value="180" min="0" max="360" step="1">
+            </div>
+            <div class="control-group">
+                <label>Stroke Width</label>
+                <input type="number" id="arcStrokeWidth" value="3" min="0" max="50">
+            </div>
+            <div class="control-group color-group">
+                <div>
+                    <label>Stroke Color</label>
+                    <input type="color" id="arcColor" value="#007bff">
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="arcStrokeTransparent">
+                    <label>Transparent</label>
+                </div>
+            </div>
+            <div class="control-group color-group">
+                <div>
+                    <label>Fill Color</label>
+                    <input type="color" id="arcFillColor" value="#007bff">
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="arcFillTransparent" checked>
+                    <label>Transparent</label>
+                </div>
+            </div>
+
+            <h2>Text Settings</h2>
+            <div class="control-group">
+                <label>Text Content</label>
+                <input type="text" id="textContent" value="Curved Text on Arc" placeholder="Enter text">
+            </div>
+            <div class="control-group">
+                <label>Font Family</label>
+                <select id="fontFamily">
+                    <option value="Arial">Arial</option>
+                    <option value="Helvetica">Helvetica</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Courier New">Courier New</option>
+                    <option value="Verdana">Verdana</option>
+                    <option value="Impact">Impact</option>
+                    <option value="Comic Sans MS">Comic Sans MS</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Font Size</label>
+                <input type="number" id="fontSize" value="24" min="8" max="200">
+            </div>
+            <div class="control-group">
+                <label>Font Weight</label>
+                <select id="fontWeight">
+                    <option value="normal">Normal</option>
+                    <option value="bold">Bold</option>
+                    <option value="lighter">Lighter</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                    <option value="300">300</option>
+                    <option value="400">400</option>
+                    <option value="500">500</option>
+                    <option value="600">600</option>
+                    <option value="700">700</option>
+                    <option value="800">800</option>
+                    <option value="900">900</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Text Color</label>
+                <input type="color" id="textColor" value="#333333">
+            </div>
+            <div class="control-group">
+                <label>Text Offset (from arc)</label>
+                <input type="number" id="textOffset" value="0" min="-200" max="200">
+            </div>
+
+            <button onclick="downloadSVG()">Download SVG</button>
+        </div>
+
+        <div class="preview">
+            <div id="svgPreview">
+                <svg id="svgCanvas"></svg>
+            </div>
+            
+            <div>
+                <h2>SVG Code</h2>
+                <div class="code-output" id="svgCode"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get all control elements
+        const controls = {
+            canvasWidth: document.getElementById('canvasWidth'),
+            canvasHeight: document.getElementById('canvasHeight'),
+            arcCenterX: document.getElementById('arcCenterX'),
+            arcCenterY: document.getElementById('arcCenterY'),
+            arcRadius: document.getElementById('arcRadius'),
+            arcThickness: document.getElementById('arcThickness'),
+            arcStartAngle: document.getElementById('arcStartAngle'),
+            arcEndAngle: document.getElementById('arcEndAngle'),
+            arcStrokeWidth: document.getElementById('arcStrokeWidth'),
+            arcColor: document.getElementById('arcColor'),
+            arcStrokeTransparent: document.getElementById('arcStrokeTransparent'),
+            arcFillColor: document.getElementById('arcFillColor'),
+            arcFillTransparent: document.getElementById('arcFillTransparent'),
+            textContent: document.getElementById('textContent'),
+            fontFamily: document.getElementById('fontFamily'),
+            fontSize: document.getElementById('fontSize'),
+            fontWeight: document.getElementById('fontWeight'),
+            textColor: document.getElementById('textColor'),
+            textOffset: document.getElementById('textOffset')
+        };
+
+        // Update angle value displays
+        controls.arcStartAngle.addEventListener('input', function() {
+            document.getElementById('startAngleVal').textContent = this.value + '°';
+            updateSVG();
+        });
+
+        controls.arcEndAngle.addEventListener('input', function() {
+            document.getElementById('endAngleVal').textContent = this.value + '°';
+            updateSVG();
+        });
+
+        // Add event listeners to all controls
+        Object.values(controls).forEach(control => {
+            control.addEventListener('input', updateSVG);
+            control.addEventListener('change', updateSVG);
+        });
+
+        function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
+            const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
+            return {
+                x: centerX + (radius * Math.cos(angleInRadians)),
+                y: centerY + (radius * Math.sin(angleInRadians))
+            };
+        }
+
+        function describeArc(x, y, radius, startAngle, endAngle) {
+            const start = polarToCartesian(x, y, radius, endAngle);
+            const end = polarToCartesian(x, y, radius, startAngle);
+            const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+            
+            return [
+                "M", start.x, start.y,
+                "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y
+            ].join(" ");
+        }
+
+        function describeThickArc(x, y, innerRadius, outerRadius, startAngle, endAngle) {
+            // Get coordinates for all four corners of the thick arc
+            const outerStart = polarToCartesian(x, y, outerRadius, endAngle);
+            const outerEnd = polarToCartesian(x, y, outerRadius, startAngle);
+            const innerStart = polarToCartesian(x, y, innerRadius, endAngle);
+            const innerEnd = polarToCartesian(x, y, innerRadius, startAngle);
+            
+            const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+            
+            // Create a closed path:
+            // 1. Start at outer arc start
+            // 2. Draw outer arc to outer arc end
+            // 3. Draw line to inner arc end
+            // 4. Draw inner arc back to inner arc start
+            // 5. Close path (line back to outer arc start)
+            return [
+                "M", outerStart.x, outerStart.y,                              // Move to outer arc start
+                "A", outerRadius, outerRadius, 0, largeArcFlag, 0, outerEnd.x, outerEnd.y,  // Outer arc
+                "L", innerEnd.x, innerEnd.y,                                  // Line to inner arc end
+                "A", innerRadius, innerRadius, 0, largeArcFlag, 1, innerStart.x, innerStart.y,  // Inner arc (reversed)
+                "Z"                                                           // Close path
+            ].join(" ");
+        }
+
+        function updateSVG() {
+            const svg = document.getElementById('svgCanvas');
+            const width = parseInt(controls.canvasWidth.value);
+            const height = parseInt(controls.canvasHeight.value);
+            const cx = parseInt(controls.arcCenterX.value);
+            const cy = parseInt(controls.arcCenterY.value);
+            const outerRadius = parseInt(controls.arcRadius.value);
+            const thickness = parseInt(controls.arcThickness.value);
+            const innerRadius = Math.max(0, outerRadius - thickness);
+            const startAngle = parseInt(controls.arcStartAngle.value);
+            const endAngle = parseInt(controls.arcEndAngle.value);
+            const strokeWidth = parseInt(controls.arcStrokeWidth.value);
+            const strokeColor = controls.arcStrokeTransparent.checked ? 'none' : controls.arcColor.value;
+            const fillColor = controls.arcFillTransparent.checked ? 'none' : controls.arcFillColor.value;
+            const textContent = controls.textContent.value;
+            const fontFamily = controls.fontFamily.value;
+            const fontSize = parseInt(controls.fontSize.value);
+            const fontWeight = controls.fontWeight.value;
+            const textColor = controls.textColor.value;
+            const textOffset = parseInt(controls.textOffset.value);
+
+            // Set SVG dimensions
+            svg.setAttribute('width', width);
+            svg.setAttribute('height', height);
+            svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+            // Clear previous content
+            svg.innerHTML = '';
+
+            // Create defs for the text path
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            
+            // Create the arc shape
+            if (thickness > 0) {
+                // Create a thick arc (wedge/band shape)
+                const arcPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                const pathData = describeThickArc(cx, cy, innerRadius, outerRadius, startAngle, endAngle);
+                arcPath.setAttribute('id', 'arcPath');
+                arcPath.setAttribute('d', pathData);
+                arcPath.setAttribute('fill', fillColor);
+                arcPath.setAttribute('stroke', strokeColor);
+                arcPath.setAttribute('stroke-width', strokeWidth);
+                svg.appendChild(arcPath);
+            } else {
+                // Create a simple arc line
+                const arcPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                const pathData = describeArc(cx, cy, outerRadius, startAngle, endAngle);
+                arcPath.setAttribute('id', 'arcPath');
+                arcPath.setAttribute('d', pathData);
+                arcPath.setAttribute('fill', 'none');
+                arcPath.setAttribute('stroke', strokeColor);
+                arcPath.setAttribute('stroke-width', strokeWidth);
+                svg.appendChild(arcPath);
+            }
+
+            // Create path for text (on the outer arc)
+            const textPathRadius = outerRadius + textOffset;
+            const textPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            const textPathData = describeArc(cx, cy, textPathRadius, startAngle, endAngle);
+            textPath.setAttribute('id', 'textPath');
+            textPath.setAttribute('d', textPathData);
+            textPath.setAttribute('fill', 'none');
+
+            defs.appendChild(textPath);
+            svg.insertBefore(defs, svg.firstChild);
+
+            // Create text element
+            if (textContent) {
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('font-family', fontFamily);
+                text.setAttribute('font-size', fontSize);
+                text.setAttribute('font-weight', fontWeight);
+                text.setAttribute('fill', textColor);
+
+                const textPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'textPath');
+                textPathElement.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#textPath');
+                textPathElement.setAttribute('startOffset', '50%');
+                textPathElement.setAttribute('text-anchor', 'middle');
+                textPathElement.textContent = textContent;
+
+                text.appendChild(textPathElement);
+                svg.appendChild(text);
+            }
+
+            // Update code display
+            updateCodeDisplay();
+        }
+
+        function updateCodeDisplay() {
+            const svg = document.getElementById('svgCanvas');
+            const serializer = new XMLSerializer();
+            let svgString = serializer.serializeToString(svg);
+            
+            // Format the SVG string for better readability
+            svgString = svgString
+                .replace(/></g, '>\n<')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            document.getElementById('svgCode').textContent = svgString;
+        }
+
+        function downloadSVG() {
+            const svg = document.getElementById('svgCanvas');
+            const serializer = new XMLSerializer();
+            let svgString = serializer.serializeToString(svg);
+            
+            // Add XML declaration
+            svgString = '<?xml version="1.0" encoding="UTF-8"?>\n' + svgString;
+            
+            const blob = new Blob([svgString], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'arc-with-text.svg';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        // Initialize on load
+        updateSVG();
+    </script>
+</body>
+</html>
