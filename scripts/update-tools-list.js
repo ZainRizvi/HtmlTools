@@ -88,23 +88,24 @@ function escapeHtml(str) {
  */
 function updateIndexHtml() {
   try {
-    // Read index.html
-    let content = fs.readFileSync(INDEX_PATH, 'utf8');
-
-    // Discover tools
+    // 1) Generate expected HTML
     const tools = discoverTools();
     const toolsHtml = generateToolsHtml(tools);
+    if (typeof toolsHtml !== 'string' || toolsHtml.length === 0) {
+      throw new Error('Failed to generate tools list HTML.');
+    }
 
-    // Replace the tools list
-    // Match everything between <ul id="tools-list"> and </ul>
+    // 2) Find the section where the HTML should go (based on id)
+    const content = fs.readFileSync(INDEX_PATH, 'utf8');
     const pattern = /(<ul[^>]*id=["']tools-list["'][^>]*>)([\s\S]*?)(<\/ul>)/;
-    if (!pattern.test(content)) {
+    const match = pattern.exec(content);
+    if (!match) {
       throw new Error('Could not find <ul id="tools-list"> block to update.');
     }
-    content = content.replace(pattern, `$1\n${toolsHtml}\n          $3`);
 
-    // Write back to index.html
-    fs.writeFileSync(INDEX_PATH, content, 'utf8');
+    // 3) Update that section, overwriting whatever was there before
+    const updatedContent = content.replace(pattern, `${match[1]}\n${toolsHtml}\n          ${match[3]}`);
+    fs.writeFileSync(INDEX_PATH, updatedContent, 'utf8');
 
     console.log(`✓ Updated tools list in index.html`);
     console.log(`  Found ${tools.length} tool(s): ${tools.join(', ')}`);
