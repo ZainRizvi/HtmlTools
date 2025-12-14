@@ -46,7 +46,7 @@ function filenameToDisplayName(filename) {
  */
 function generateToolsHtml(tools) {
   if (tools.length === 0) {
-    return '            <li><strong>No tools yet.</strong></li>';
+    return '            <li class="empty-state"><strong>No tools yet.</strong></li>';
   }
 
   return tools
@@ -54,10 +54,10 @@ function generateToolsHtml(tools) {
       const displayName = filenameToDisplayName(tool);
       const description = getDescriptionForTool(tool);
       const url = `${BASE_URL}${tool}`;
-      const descSuffix = description
-        ? ` <span aria-label="description">— ${escapeHtml(description)}</span>`
+      const descHtml = description
+        ? `<div class="tool-description">${escapeHtml(description)}</div>`
         : '';
-      return `            <li><a href="${url}">${displayName}</a>${descSuffix}</li>`;
+      return `            <li><a class="tool-card" href="${url}"><div class="tool-name">${displayName}</div>${descHtml}</a></li>`;
     })
     .join('\n');
 }
