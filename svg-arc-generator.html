@@ -641,7 +641,391 @@
         </div>
     </div>
 
+    <!-- MODULE: SVG Math Utilities
+         Reusable functions for polar/cartesian coordinate conversion and SVG arc path generation.
+         Copy this entire <script> block into any tool that needs SVG arc paths.
+    -->
     <script>
+        /**
+         * Convert polar coordinates (angle + radius) to cartesian coordinates (x, y)
+         * @param {number} centerX - X coordinate of circle center
+         * @param {number} centerY - Y coordinate of circle center
+         * @param {number} radius - Distance from center
+         * @param {number} angleInDegrees - Angle in degrees (0° = top, increases clockwise)
+         * @returns {{x: number, y: number}} Cartesian coordinates
+         */
+        function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
+            const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
+            return {
+                x: centerX + (radius * Math.cos(angleInRadians)),
+                y: centerY + (radius * Math.sin(angleInRadians))
+            };
+        }
+
+        /**
+         * Generate SVG path data for a simple arc (stroke only, no fill)
+         * @param {number} x - X coordinate of arc center
+         * @param {number} y - Y coordinate of arc center
+         * @param {number} radius - Arc radius
+         * @param {number} startAngle - Start angle in degrees
+         * @param {number} endAngle - End angle in degrees
+         * @returns {string} SVG path data string (for use in <path d="...">)
+         */
+        function describeArc(x, y, radius, startAngle, endAngle) {
+            const start = polarToCartesian(x, y, radius, endAngle);
+            const end = polarToCartesian(x, y, radius, startAngle);
+            const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+
+            return [
+                "M", start.x, start.y,
+                "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y
+            ].join(" ");
+        }
+
+        /**
+         * Generate SVG path data for a thick arc (donut/ring shape with fill)
+         * @param {number} x - X coordinate of arc center
+         * @param {number} y - Y coordinate of arc center
+         * @param {number} innerRadius - Inner radius of the ring
+         * @param {number} outerRadius - Outer radius of the ring
+         * @param {number} startAngle - Start angle in degrees
+         * @param {number} endAngle - End angle in degrees
+         * @returns {string} SVG path data string for a filled ring segment
+         */
+        function describeThickArc(x, y, innerRadius, outerRadius, startAngle, endAngle) {
+            const outerStart = polarToCartesian(x, y, outerRadius, endAngle);
+            const outerEnd = polarToCartesian(x, y, outerRadius, startAngle);
+            const innerStart = polarToCartesian(x, y, innerRadius, endAngle);
+            const innerEnd = polarToCartesian(x, y, innerRadius, startAngle);
+
+            const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+
+            return [
+                "M", outerStart.x, outerStart.y,
+                "A", outerRadius, outerRadius, 0, largeArcFlag, 0, outerEnd.x, outerEnd.y,
+                "L", innerEnd.x, innerEnd.y,
+                "A", innerRadius, innerRadius, 0, largeArcFlag, 1, innerStart.x, innerStart.y,
+                "Z"
+            ].join(" ");
+        }
+    </script>
+
+    <!-- MODULE: Clipboard Copy with Visual Feedback
+         Generic copy-to-clipboard function with button state feedback.
+         Works with any text content and any button element.
+    -->
+    <script>
+        /**
+         * Copy text to clipboard and show visual feedback on a button
+         * @param {string} text - Text to copy
+         * @param {HTMLElement} button - Button element to show feedback on
+         * @param {Object} options - Configuration options
+         * @param {string} options.successText - Text to show on success (default: 'Copied!')
+         * @param {string} options.originalText - Text to restore after feedback (default: button's current text)
+         * @param {string} options.successClass - CSS class to add on success (default: 'copied')
+         * @param {number} options.duration - How long to show feedback in ms (default: 2000)
+         */
+        function copyToClipboard(text, button, options = {}) {
+            const {
+                successText = 'Copied!',
+                originalText = button.textContent,
+                successClass = 'copied',
+                duration = 2000
+            } = options;
+
+            navigator.clipboard.writeText(text).then(() => {
+                button.textContent = successText;
+                button.classList.add(successClass);
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove(successClass);
+                }, duration);
+            });
+        }
+    </script>
+
+    <!-- MODULE: File Download Helper
+         Generic function to trigger downloads of any blob/file from the browser.
+         Works with any file type (SVG, JSON, CSV, images, etc.).
+    -->
+    <script>
+        /**
+         * Trigger a file download in the browser
+         * @param {string} content - File content as string
+         * @param {string} filename - Name for the downloaded file
+         * @param {string} mimeType - MIME type (e.g., 'image/svg+xml', 'application/json', 'text/csv')
+         * @param {string} xmlHeader - Optional XML declaration to prepend (e.g., '<?xml version="1.0" encoding="UTF-8"?>')
+         */
+        function downloadFile(content, filename, mimeType, xmlHeader = null) {
+            let fileContent = content;
+            if (xmlHeader) {
+                fileContent = xmlHeader + '\n' + content;
+            }
+
+            const blob = new Blob([fileContent], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+
+    <!-- MODULE: Number Input Drag Enhancement
+         Enhances all number inputs to allow drag-to-adjust (vertical drag = change value).
+         Automatically applies to all input[type="number"] elements.
+         Add CSS class 'dragging' to style the input during drag.
+    -->
+    <script>
+        /**
+         * Enable drag-to-adjust on number inputs
+         * @param {string} selector - CSS selector for number inputs (default: 'input[type="number"]')
+         */
+        function enableNumberInputDrag(selector = 'input[type="number"]') {
+            const numberInputs = document.querySelectorAll(selector);
+
+            numberInputs.forEach(input => {
+                let isDragging = false;
+                let startY = 0;
+                let startValue = 0;
+
+                input.addEventListener('mousedown', function(e) {
+                    isDragging = true;
+                    startY = e.clientY;
+                    startValue = parseFloat(this.value) || 0;
+                    this.classList.add('dragging');
+                    e.preventDefault();
+                });
+
+                document.addEventListener('mousemove', function(e) {
+                    if (!isDragging) return;
+
+                    const deltaY = startY - e.clientY;
+                    const min = parseFloat(input.min) || -Infinity;
+                    const max = parseFloat(input.max) || Infinity;
+                    const step = parseFloat(input.step) || 1;
+
+                    let newValue = startValue + (deltaY * step);
+                    newValue = Math.max(min, Math.min(max, newValue));
+
+                    input.value = Math.round(newValue);
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                });
+
+                document.addEventListener('mouseup', function() {
+                    if (isDragging) {
+                        isDragging = false;
+                        input.classList.remove('dragging');
+                    }
+                });
+            });
+        }
+    </script>
+
+    <!-- MODULE: Angle Visualization Widget
+         Creates a visual angle picker (circle with rotating indicator line).
+         Renders an SVG visualization showing the current angle.
+    -->
+    <script>
+        /**
+         * Update an angle visualization widget
+         * @param {string|HTMLElement} svgElementOrId - SVG element or its ID
+         * @param {number} angle - Angle in degrees (0° = top, increases clockwise)
+         * @param {Object} options - Styling options
+         * @param {string} options.circleStroke - Circle stroke color (default: 'rgba(0, 217, 255, 0.2)')
+         * @param {string} options.lineStroke - Indicator line color (default: '#00d9ff')
+         * @param {string} options.dotFill - Endpoint dot color (default: '#00d9ff')
+         */
+        function updateAngleVisual(svgElementOrId, angle, options = {}) {
+            const {
+                circleStroke = 'rgba(0, 217, 255, 0.2)',
+                lineStroke = '#00d9ff',
+                dotFill = '#00d9ff'
+            } = options;
+
+            const svg = typeof svgElementOrId === 'string'
+                ? document.getElementById(svgElementOrId)
+                : svgElementOrId;
+
+            const cx = 30, cy = 30, r = 22;
+            const angleRad = (angle - 90) * Math.PI / 180;
+            const x = cx + r * Math.cos(angleRad);
+            const y = cy + r * Math.sin(angleRad);
+
+            // Clear existing content
+            while (svg.firstChild) {
+                svg.removeChild(svg.firstChild);
+            }
+
+            // Create circle
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', '30');
+            circle.setAttribute('cy', '30');
+            circle.setAttribute('r', '24');
+            circle.setAttribute('fill', 'none');
+            circle.setAttribute('stroke', circleStroke);
+            circle.setAttribute('stroke-width', '1');
+            svg.appendChild(circle);
+
+            // Create line
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', '30');
+            line.setAttribute('y1', '30');
+            line.setAttribute('x2', x.toString());
+            line.setAttribute('y2', y.toString());
+            line.setAttribute('stroke', lineStroke);
+            line.setAttribute('stroke-width', '2');
+            svg.appendChild(line);
+
+            // Create dot
+            const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            dot.setAttribute('cx', x.toString());
+            dot.setAttribute('cy', y.toString());
+            dot.setAttribute('r', '3');
+            dot.setAttribute('fill', dotFill);
+            svg.appendChild(dot);
+        }
+    </script>
+
+    <!-- MODULE: SVG Canvas Grid & Coordinates
+         Adds a visual grid and coordinate system to an SVG canvas.
+         Useful for debugging, education, and showing precise positioning.
+    -->
+    <script>
+        /**
+         * Add grid lines and coordinate labels to an SVG element
+         * @param {SVGElement} svg - The SVG element to add the grid to
+         * @param {number} width - Canvas width
+         * @param {number} height - Canvas height
+         * @param {Object} options - Styling and configuration options
+         * @param {number} options.gridSpacing - Space between grid lines in pixels (default: 50)
+         * @param {string} options.gridColor - Color of grid lines (default: 'rgba(0, 217, 255, 0.08)')
+         * @param {string} options.borderColor - Color of canvas border (default: 'rgba(0, 217, 255, 0.3)')
+         * @param {string} options.labelColor - Color of coordinate labels (default: 'rgba(0, 217, 255, 0.6)')
+         * @param {string} options.fontFamily - Font family for labels (default: 'Courier Prime, monospace')
+         * @param {boolean} options.showBorder - Whether to show canvas border (default: true)
+         * @param {boolean} options.showGrid - Whether to show grid lines (default: true)
+         * @param {boolean} options.showLabels - Whether to show coordinate labels (default: true)
+         * @returns {SVGGElement} The group element containing all grid/coordinate elements
+         */
+        function addSVGCanvasGrid(svg, width, height, options = {}) {
+            const {
+                gridSpacing = 50,
+                gridColor = 'rgba(0, 217, 255, 0.08)',
+                borderColor = 'rgba(0, 217, 255, 0.3)',
+                labelColor = 'rgba(0, 217, 255, 0.6)',
+                fontFamily = 'Courier Prime, monospace',
+                showBorder = true,
+                showGrid = true,
+                showLabels = true
+            } = options;
+
+            const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            group.setAttribute('class', 'svg-canvas-grid');
+
+            // Draw canvas border
+            if (showBorder) {
+                const border = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                border.setAttribute('x', '0');
+                border.setAttribute('y', '0');
+                border.setAttribute('width', width);
+                border.setAttribute('height', height);
+                border.setAttribute('fill', 'none');
+                border.setAttribute('stroke', borderColor);
+                border.setAttribute('stroke-width', '2');
+                group.appendChild(border);
+            }
+
+            // Draw coordinate grid
+            if (showGrid) {
+                const gridGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+                // Vertical grid lines
+                for (let x = gridSpacing; x < width; x += gridSpacing) {
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', x);
+                    line.setAttribute('y1', '0');
+                    line.setAttribute('x2', x);
+                    line.setAttribute('y2', height);
+                    line.setAttribute('stroke', gridColor);
+                    line.setAttribute('stroke-width', '1');
+                    gridGroup.appendChild(line);
+                }
+
+                // Horizontal grid lines
+                for (let y = gridSpacing; y < height; y += gridSpacing) {
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', '0');
+                    line.setAttribute('y1', y);
+                    line.setAttribute('x2', width);
+                    line.setAttribute('y2', y);
+                    line.setAttribute('stroke', gridColor);
+                    line.setAttribute('stroke-width', '1');
+                    gridGroup.appendChild(line);
+                }
+
+                group.appendChild(gridGroup);
+            }
+
+            // Draw coordinate system indicators
+            if (showLabels) {
+                // (0,0) label at top-left
+                const originLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                originLabel.setAttribute('x', '8');
+                originLabel.setAttribute('y', '16');
+                originLabel.setAttribute('fill', labelColor);
+                originLabel.setAttribute('font-size', '11');
+                originLabel.setAttribute('font-family', fontFamily);
+                originLabel.setAttribute('font-weight', '700');
+                originLabel.textContent = '(0,0)';
+                group.appendChild(originLabel);
+
+                // X axis label
+                const xAxisLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                xAxisLabel.setAttribute('x', '8');
+                xAxisLabel.setAttribute('y', '30');
+                xAxisLabel.setAttribute('fill', labelColor);
+                xAxisLabel.setAttribute('font-size', '11');
+                xAxisLabel.setAttribute('font-family', fontFamily);
+                xAxisLabel.setAttribute('font-weight', '700');
+                xAxisLabel.textContent = 'X →';
+                group.appendChild(xAxisLabel);
+
+                // Y axis label
+                const yAxisLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                yAxisLabel.setAttribute('x', '8');
+                yAxisLabel.setAttribute('y', '44');
+                yAxisLabel.setAttribute('fill', labelColor);
+                yAxisLabel.setAttribute('font-size', '11');
+                yAxisLabel.setAttribute('font-family', fontFamily);
+                yAxisLabel.setAttribute('font-weight', '700');
+                yAxisLabel.textContent = 'Y ↓';
+                group.appendChild(yAxisLabel);
+
+                // Bottom-right corner label
+                const cornerLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                cornerLabel.setAttribute('x', width - 8);
+                cornerLabel.setAttribute('y', height - 8);
+                cornerLabel.setAttribute('fill', labelColor.replace('0.6', '0.4')); // Slightly dimmer
+                cornerLabel.setAttribute('font-size', '10');
+                cornerLabel.setAttribute('font-family', fontFamily);
+                cornerLabel.setAttribute('text-anchor', 'end');
+                cornerLabel.textContent = `(${width},${height})`;
+                group.appendChild(cornerLabel);
+            }
+
+            return group;
+        }
+    </script>
+
+    <!-- APPLICATION: SVG Arc Generator Main Logic
+         This section contains the app-specific code that ties together the reusable modules above.
+    -->
+    <script>
+        // Gather all control elements
         const controls = {
             canvasWidth: document.getElementById('canvasWidth'),
             canvasHeight: document.getElementById('canvasHeight'),
@@ -664,6 +1048,7 @@
             textOffset: document.getElementById('textOffset')
         };
 
+        // Update value displays next to range inputs
         function updateValueDisplays() {
             document.getElementById('radiusVal').textContent = controls.arcRadius.value + 'px';
             document.getElementById('thicknessVal').textContent = controls.arcThickness.value + 'px';
@@ -674,47 +1059,7 @@
             document.getElementById('textOffsetVal').textContent = controls.textOffset.value + 'px';
         }
 
-        function updateAngleVisual(svgId, angle) {
-            const svg = document.getElementById(svgId);
-            const cx = 30, cy = 30, r = 22;
-            const angleRad = (angle - 90) * Math.PI / 180;
-            const x = cx + r * Math.cos(angleRad);
-            const y = cy + r * Math.sin(angleRad);
-
-            // Clear existing content
-            while (svg.firstChild) {
-                svg.removeChild(svg.firstChild);
-            }
-
-            // Create circle
-            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circle.setAttribute('cx', '30');
-            circle.setAttribute('cy', '30');
-            circle.setAttribute('r', '24');
-            circle.setAttribute('fill', 'none');
-            circle.setAttribute('stroke', 'rgba(0, 217, 255, 0.2)');
-            circle.setAttribute('stroke-width', '1');
-            svg.appendChild(circle);
-
-            // Create line
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', '30');
-            line.setAttribute('y1', '30');
-            line.setAttribute('x2', x.toString());
-            line.setAttribute('y2', y.toString());
-            line.setAttribute('stroke', '#00d9ff');
-            line.setAttribute('stroke-width', '2');
-            svg.appendChild(line);
-
-            // Create dot
-            const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            dot.setAttribute('cx', x.toString());
-            dot.setAttribute('cy', y.toString());
-            dot.setAttribute('r', '3');
-            dot.setAttribute('fill', '#00d9ff');
-            svg.appendChild(dot);
-        }
-
+        // Bind angle controls to both value display and visual widget
         controls.arcStartAngle.addEventListener('input', function() {
             updateValueDisplays();
             updateAngleVisual('startAngleVisual', this.value);
@@ -727,6 +1072,7 @@
             updateSVG();
         });
 
+        // Bind range inputs to value displays
         controls.arcRadius.addEventListener('input', function() {
             updateValueDisplays();
             updateSVG();
@@ -752,47 +1098,13 @@
             updateSVG();
         });
 
+        // Bind all controls to SVG update
         Object.values(controls).forEach(control => {
             control.addEventListener('input', updateSVG);
             control.addEventListener('change', updateSVG);
         });
 
-        function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
-            const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
-            return {
-                x: centerX + (radius * Math.cos(angleInRadians)),
-                y: centerY + (radius * Math.sin(angleInRadians))
-            };
-        }
-
-        function describeArc(x, y, radius, startAngle, endAngle) {
-            const start = polarToCartesian(x, y, radius, endAngle);
-            const end = polarToCartesian(x, y, radius, startAngle);
-            const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-
-            return [
-                "M", start.x, start.y,
-                "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y
-            ].join(" ");
-        }
-
-        function describeThickArc(x, y, innerRadius, outerRadius, startAngle, endAngle) {
-            const outerStart = polarToCartesian(x, y, outerRadius, endAngle);
-            const outerEnd = polarToCartesian(x, y, outerRadius, startAngle);
-            const innerStart = polarToCartesian(x, y, innerRadius, endAngle);
-            const innerEnd = polarToCartesian(x, y, innerRadius, startAngle);
-
-            const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-
-            return [
-                "M", outerStart.x, outerStart.y,
-                "A", outerRadius, outerRadius, 0, largeArcFlag, 0, outerEnd.x, outerEnd.y,
-                "L", innerEnd.x, innerEnd.y,
-                "A", innerRadius, innerRadius, 0, largeArcFlag, 1, innerStart.x, innerStart.y,
-                "Z"
-            ].join(" ");
-        }
-
+        // Main SVG rendering function
         function updateSVG() {
             const svg = document.getElementById('svgCanvas');
             const width = parseInt(controls.canvasWidth.value);
@@ -823,93 +1135,13 @@
                 svg.removeChild(svg.firstChild);
             }
 
-            // Draw canvas border
-            const border = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            border.setAttribute('x', '0');
-            border.setAttribute('y', '0');
-            border.setAttribute('width', width);
-            border.setAttribute('height', height);
-            border.setAttribute('fill', 'none');
-            border.setAttribute('stroke', 'rgba(0, 217, 255, 0.3)');
-            border.setAttribute('stroke-width', '2');
-            svg.appendChild(border);
-
-            // Draw coordinate grid
-            const gridSpacing = 50;
-            const gridGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-
-            // Vertical grid lines
-            for (let x = gridSpacing; x < width; x += gridSpacing) {
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line.setAttribute('x1', x);
-                line.setAttribute('y1', '0');
-                line.setAttribute('x2', x);
-                line.setAttribute('y2', height);
-                line.setAttribute('stroke', 'rgba(0, 217, 255, 0.08)');
-                line.setAttribute('stroke-width', '1');
-                gridGroup.appendChild(line);
-            }
-
-            // Horizontal grid lines
-            for (let y = gridSpacing; y < height; y += gridSpacing) {
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line.setAttribute('x1', '0');
-                line.setAttribute('y1', y);
-                line.setAttribute('x2', width);
-                line.setAttribute('y2', y);
-                line.setAttribute('stroke', 'rgba(0, 217, 255, 0.08)');
-                line.setAttribute('stroke-width', '1');
-                gridGroup.appendChild(line);
-            }
+            // Add grid and coordinate system (using the SVG Canvas Grid module)
+            const gridGroup = addSVGCanvasGrid(svg, width, height);
             svg.appendChild(gridGroup);
-
-            // Draw coordinate system indicators
-            // (0,0) label at top-left
-            const originLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            originLabel.setAttribute('x', '8');
-            originLabel.setAttribute('y', '16');
-            originLabel.setAttribute('fill', 'rgba(0, 217, 255, 0.6)');
-            originLabel.setAttribute('font-size', '11');
-            originLabel.setAttribute('font-family', 'Courier Prime, monospace');
-            originLabel.setAttribute('font-weight', '700');
-            originLabel.textContent = '(0,0)';
-            svg.appendChild(originLabel);
-
-            // X axis label
-            const xAxisLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            xAxisLabel.setAttribute('x', '8');
-            xAxisLabel.setAttribute('y', '30');
-            xAxisLabel.setAttribute('fill', 'rgba(0, 217, 255, 0.6)');
-            xAxisLabel.setAttribute('font-size', '11');
-            xAxisLabel.setAttribute('font-family', 'Courier Prime, monospace');
-            xAxisLabel.setAttribute('font-weight', '700');
-            xAxisLabel.textContent = 'X →';
-            svg.appendChild(xAxisLabel);
-
-            // Y axis label
-            const yAxisLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            yAxisLabel.setAttribute('x', '8');
-            yAxisLabel.setAttribute('y', '44');
-            yAxisLabel.setAttribute('fill', 'rgba(0, 217, 255, 0.6)');
-            yAxisLabel.setAttribute('font-size', '11');
-            yAxisLabel.setAttribute('font-family', 'Courier Prime, monospace');
-            yAxisLabel.setAttribute('font-weight', '700');
-            yAxisLabel.textContent = 'Y ↓';
-            svg.appendChild(yAxisLabel);
-
-            // Bottom-right corner label
-            const cornerLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            cornerLabel.setAttribute('x', width - 8);
-            cornerLabel.setAttribute('y', height - 8);
-            cornerLabel.setAttribute('fill', 'rgba(0, 217, 255, 0.4)');
-            cornerLabel.setAttribute('font-size', '10');
-            cornerLabel.setAttribute('font-family', 'Courier Prime, monospace');
-            cornerLabel.setAttribute('text-anchor', 'end');
-            cornerLabel.textContent = `(${width},${height})`;
-            svg.appendChild(cornerLabel);
 
             const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
 
+            // Draw the arc (use thick arc if thickness > 0, otherwise simple arc)
             if (thickness > 0) {
                 const arcPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const pathData = describeThickArc(cx, cy, innerRadius, outerRadius, startAngle, endAngle);
@@ -930,6 +1162,7 @@
                 svg.appendChild(arcPath);
             }
 
+            // Create text path (for curved text along the arc)
             const textPathRadius = outerRadius + textOffset;
             const textPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             const textPathData = describeArc(cx, cy, textPathRadius, startAngle, endAngle);
@@ -940,6 +1173,7 @@
             defs.appendChild(textPath);
             svg.insertBefore(defs, svg.firstChild);
 
+            // Add curved text if content exists
             if (textContent) {
                 const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 text.setAttribute('font-family', fontFamily);
@@ -960,6 +1194,7 @@
             updateCodeDisplay();
         }
 
+        // Update the code display panel
         function updateCodeDisplay() {
             const svg = document.getElementById('svgCanvas');
             const serializer = new XMLSerializer();
@@ -973,37 +1208,28 @@
             document.getElementById('svgCode').textContent = svgString;
         }
 
+        // Copy SVG code to clipboard (using the copyToClipboard module)
         function copySVGCode() {
             const codeText = document.getElementById('svgCode').textContent;
-            navigator.clipboard.writeText(codeText).then(() => {
-                const btn = document.querySelector('.copy-btn');
-                btn.textContent = 'Copied!';
-                btn.classList.add('copied');
-                setTimeout(() => {
-                    btn.textContent = 'Copy';
-                    btn.classList.remove('copied');
-                }, 2000);
-            });
+            const btn = document.querySelector('.copy-btn');
+            copyToClipboard(codeText, btn);
         }
 
+        // Download SVG file (using the downloadFile module)
         function downloadSVG() {
             const svg = document.getElementById('svgCanvas');
             const serializer = new XMLSerializer();
-            let svgString = serializer.serializeToString(svg);
+            const svgString = serializer.serializeToString(svg);
 
-            svgString = '<?xml version="1.0" encoding="UTF-8"?>\n' + svgString;
-
-            const blob = new Blob([svgString], { type: 'image/svg+xml' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = 'arc-with-text.svg';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
+            downloadFile(
+                svgString,
+                'arc-with-text.svg',
+                'image/svg+xml',
+                '<?xml version="1.0" encoding="UTF-8"?>'
+            );
         }
 
+        // Load preset configurations
         function loadPreset(preset) {
             switch(preset) {
                 case 'semicircle':
@@ -1028,45 +1254,10 @@
             updateSVG();
         }
 
-        // Drag to adjust number inputs
-        const numberInputs = document.querySelectorAll('input[type="number"]');
-        numberInputs.forEach(input => {
-            let isDragging = false;
-            let startY = 0;
-            let startValue = 0;
+        // Initialize drag enhancement on number inputs
+        enableNumberInputDrag();
 
-            input.addEventListener('mousedown', function(e) {
-                isDragging = true;
-                startY = e.clientY;
-                startValue = parseFloat(this.value) || 0;
-                this.classList.add('dragging');
-                e.preventDefault();
-            });
-
-            document.addEventListener('mousemove', function(e) {
-                if (!isDragging) return;
-
-                const deltaY = startY - e.clientY;
-                const min = parseFloat(input.min) || -Infinity;
-                const max = parseFloat(input.max) || Infinity;
-                const step = parseFloat(input.step) || 1;
-
-                let newValue = startValue + (deltaY * step);
-                newValue = Math.max(min, Math.min(max, newValue));
-
-                input.value = Math.round(newValue);
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            });
-
-            document.addEventListener('mouseup', function() {
-                if (isDragging) {
-                    isDragging = false;
-                    input.classList.remove('dragging');
-                }
-            });
-        });
-
-        // Initialize
+        // Initialize the app
         updateValueDisplays();
         updateAngleVisual('startAngleVisual', controls.arcStartAngle.value);
         updateAngleVisual('endAngleVisual', controls.arcEndAngle.value);
