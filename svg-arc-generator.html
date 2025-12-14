@@ -5,7 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Generate SVG arc paths and curved text with visual controls and real-time preview.">
     <title>SVG Arc & Curved Text Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg: #0a0a0a;
+            --surface: #141414;
+            --surface-elevated: #1c1c1c;
+            --surface-hover: #222222;
+            --text: #ffffff;
+            --text-muted: #a0a0a0;
+            --text-dim: #666666;
+            --accent: #00d9ff;
+            --accent-dim: #00a8cc;
+            --accent-glow: rgba(0, 217, 255, 0.2);
+            --border: rgba(0, 217, 255, 0.2);
+            --border-subtle: rgba(255, 255, 255, 0.1);
+            --success: #00ff88;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -13,292 +32,616 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #f5f5f5;
-            padding: 20px;
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .header {
+            padding: 24px;
+            border-bottom: 1px solid var(--border-subtle);
+            background: var(--surface);
+        }
+
+        .header h1 {
+            font-family: 'Courier Prime', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--accent);
+            margin: 0;
+        }
+
+        .header h1::before {
+            content: '> ';
+            color: var(--accent);
         }
 
         .container {
-            max-width: 1400px;
-            margin: 0 auto;
             display: grid;
-            grid-template-columns: 350px 1fr;
-            gap: 20px;
+            grid-template-columns: 380px 1fr;
+            height: calc(100vh - 80px);
         }
 
+        /* Controls Panel */
         .controls {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            height: fit-content;
+            background: var(--surface);
+            border-right: 1px solid var(--border-subtle);
+            overflow-y: auto;
+            padding: 24px;
         }
 
-        .preview {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
+        .controls::-webkit-scrollbar {
+            width: 8px;
         }
 
-        h1 {
-            font-size: 24px;
-            margin-bottom: 20px;
-            color: #333;
+        .controls::-webkit-scrollbar-track {
+            background: var(--surface);
         }
 
-        h2 {
-            font-size: 18px;
-            margin: 20px 0 10px 0;
-            color: #555;
-            border-bottom: 2px solid #e0e0e0;
-            padding-bottom: 5px;
+        .controls::-webkit-scrollbar-thumb {
+            background: var(--accent-dim);
+            border-radius: 4px;
+        }
+
+        .section {
+            margin-bottom: 32px;
+        }
+
+        .section-header {
+            font-family: 'Courier Prime', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         .control-group {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
 
         label {
             display: block;
-            margin-bottom: 5px;
-            color: #666;
-            font-size: 14px;
+            margin-bottom: 8px;
+            color: var(--text-muted);
+            font-size: 13px;
             font-weight: 500;
+        }
+
+        .label-with-value {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .value-display {
+            font-family: 'Courier Prime', monospace;
+            color: var(--accent);
+            font-weight: 600;
+            font-size: 14px;
         }
 
         input[type="number"],
         input[type="text"],
         select {
             width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            padding: 10px 12px;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            color: var(--text);
             font-size: 14px;
+            font-family: 'Courier Prime', monospace;
+            transition: all 0.2s ease;
         }
 
-        input[type="color"] {
-            width: 100%;
-            height: 40px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            cursor: pointer;
+        input[type="number"]:focus,
+        input[type="text"]:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        input[type="number"]:hover,
+        input[type="text"]:hover,
+        select:hover {
+            border-color: var(--accent);
+        }
+
+        input[type="number"] {
+            cursor: ns-resize;
+        }
+
+        input[type="number"].dragging {
+            cursor: ns-resize;
+            user-select: none;
         }
 
         input[type="range"] {
             width: 100%;
+            height: 6px;
+            background: var(--surface-elevated);
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
         }
 
-        .color-group {
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 8px var(--accent-glow);
+            transition: all 0.2s ease;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 12px var(--accent);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: var(--accent);
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 8px var(--accent-glow);
+            transition: all 0.2s ease;
+        }
+
+        input[type="range"]::-moz-range-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 0 12px var(--accent);
+        }
+
+        /* Angle Picker */
+        .angle-picker {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-top: 8px;
+        }
+
+        .angle-visual {
+            width: 60px;
+            height: 60px;
+            flex-shrink: 0;
+        }
+
+        .angle-slider {
+            flex: 1;
+        }
+
+        /* Color Picker */
+        .color-control {
             display: grid;
             grid-template-columns: 1fr auto;
-            gap: 10px;
+            gap: 12px;
             align-items: end;
         }
 
-        .checkbox-group {
+        .color-input-wrapper {
+            position: relative;
+        }
+
+        input[type="color"] {
+            width: 100%;
+            height: 48px;
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            cursor: pointer;
+            background: var(--surface-elevated);
+            transition: all 0.2s ease;
+        }
+
+        input[type="color"]:hover {
+            border-color: var(--accent);
+        }
+
+        .checkbox-wrapper {
             display: flex;
             align-items: center;
             gap: 8px;
-        }
-
-        .checkbox-group input[type="checkbox"] {
-            width: auto;
-        }
-
-        button {
-            width: 100%;
             padding: 12px;
-            background: #007bff;
-            color: white;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .checkbox-wrapper:hover {
+            background: var(--surface-hover);
+            border-color: var(--accent);
+        }
+
+        .checkbox-wrapper input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: var(--accent);
+        }
+
+        .checkbox-wrapper label {
+            margin: 0;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        /* Presets */
+        .presets {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .preset-btn {
+            padding: 10px;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: 'Courier Prime', monospace;
+        }
+
+        .preset-btn:hover {
+            background: var(--surface-hover);
+            border-color: var(--accent);
+            color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        /* Buttons */
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--accent);
+            color: var(--bg);
             border: none;
-            border-radius: 4px;
-            font-size: 16px;
+            border-radius: 6px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            margin-top: 10px;
+            transition: all 0.2s ease;
+            font-family: 'Courier Prime', monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
-        button:hover {
-            background: #0056b3;
+        .btn:hover {
+            background: var(--accent-dim);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px var(--accent-glow);
         }
 
-        #svgPreview {
-            border: 1px solid #e0e0e0;
-            border-radius: 4px;
-            background: 
-                repeating-conic-gradient(#f0f0f0 0% 25%, white 0% 50%) 
-                50% / 20px 20px;
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        /* Preview Panel */
+        .preview {
+            display: flex;
+            flex-direction: column;
+            background: var(--bg);
+            overflow: hidden;
+        }
+
+        .preview-area {
+            flex: 1;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 400px;
+            background-image:
+                repeating-linear-gradient(0deg, rgba(0, 217, 255, 0.02) 0px, transparent 1px, transparent 24px),
+                repeating-linear-gradient(90deg, rgba(0, 217, 255, 0.02) 0px, transparent 1px, transparent 24px);
+            position: relative;
+            overflow: auto;
+            padding: 40px;
         }
 
         #svgCanvas {
-            max-width: 100%;
-            height: auto;
+            filter: drop-shadow(0 4px 20px rgba(0, 217, 255, 0.15));
+        }
+
+        .code-panel {
+            background: var(--surface);
+            border-top: 1px solid var(--border-subtle);
+            padding: 20px 24px;
+            max-height: 300px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .code-header h3 {
+            font-family: 'Courier Prime', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .copy-btn {
+            padding: 8px 16px;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--accent);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: 'Courier Prime', monospace;
+        }
+
+        .copy-btn:hover {
+            background: var(--accent);
+            color: var(--bg);
+        }
+
+        .copy-btn.copied {
+            background: var(--success);
+            color: var(--bg);
+            border-color: var(--success);
         }
 
         .code-output {
-            background: #f8f8f8;
-            border: 1px solid #e0e0e0;
+            flex: 1;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            padding: 16px;
+            font-family: 'Courier Prime', monospace;
+            font-size: 11px;
+            overflow: auto;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .code-output::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .code-output::-webkit-scrollbar-track {
+            background: var(--surface-elevated);
+        }
+
+        .code-output::-webkit-scrollbar-thumb {
+            background: var(--accent-dim);
             border-radius: 4px;
-            padding: 15px;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            overflow-x: auto;
-            max-height: 300px;
-            overflow-y: auto;
         }
 
-        .value-display {
-            display: inline-block;
-            margin-left: 10px;
-            color: #007bff;
-            font-weight: 600;
-        }
-
+        /* Responsive */
         @media (max-width: 1024px) {
             .container {
                 grid-template-columns: 1fr;
+                height: auto;
+            }
+
+            .controls {
+                border-right: none;
+                border-bottom: 1px solid var(--border-subtle);
+                max-height: none;
+            }
+
+            .preview-area {
+                min-height: 400px;
             }
         }
     </style>
 </head>
 <body>
+    <div class="header">
+        <h1>SVG Arc Generator</h1>
+    </div>
+
     <div class="container">
         <div class="controls">
-            <h1>SVG Arc Generator</h1>
-            
-            <h2>Canvas Size</h2>
-            <div class="control-group">
-                <label>Width (px)</label>
-                <input type="number" id="canvasWidth" value="500" min="100" max="2000">
-            </div>
-            <div class="control-group">
-                <label>Height (px)</label>
-                <input type="number" id="canvasHeight" value="500" min="100" max="2000">
+            <div class="section">
+                <div class="section-header">Quick Presets</div>
+                <div class="presets">
+                    <button class="preset-btn" onclick="loadPreset('semicircle')">Semicircle</button>
+                    <button class="preset-btn" onclick="loadPreset('quarter')">Quarter</button>
+                    <button class="preset-btn" onclick="loadPreset('three-quarter')">3/4 Circle</button>
+                </div>
             </div>
 
-            <h2>Arc Settings</h2>
-            <div class="control-group">
-                <label>Center X</label>
-                <input type="number" id="arcCenterX" value="250" min="0">
+            <div class="section">
+                <div class="section-header">Canvas</div>
+                <div class="control-group">
+                    <label>Width × Height (px)</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <input type="number" id="canvasWidth" value="500" min="100" max="2000">
+                        <input type="number" id="canvasHeight" value="500" min="100" max="2000">
+                    </div>
+                </div>
             </div>
-            <div class="control-group">
-                <label>Center Y</label>
-                <input type="number" id="arcCenterY" value="250" min="0">
+
+            <div class="section">
+                <div class="section-header">Arc Geometry</div>
+
+                <div class="control-group">
+                    <label>Center Point (X, Y)</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <input type="number" id="arcCenterX" value="250" min="0">
+                        <input type="number" id="arcCenterY" value="250" min="0">
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="label-with-value">
+                        <label>Outer Radius</label>
+                        <span class="value-display" id="radiusVal">150px</span>
+                    </div>
+                    <input type="range" id="arcRadius" value="150" min="10" max="500" step="1">
+                </div>
+
+                <div class="control-group">
+                    <div class="label-with-value">
+                        <label>Thickness</label>
+                        <span class="value-display" id="thicknessVal">0px</span>
+                    </div>
+                    <input type="range" id="arcThickness" value="0" min="0" max="200" step="1">
+                </div>
+
+                <div class="control-group">
+                    <div class="label-with-value">
+                        <label>Start Angle</label>
+                        <span class="value-display" id="startAngleVal">0°</span>
+                    </div>
+                    <div class="angle-picker">
+                        <svg class="angle-visual" viewBox="0 0 60 60" id="startAngleVisual"></svg>
+                        <input type="range" class="angle-slider" id="arcStartAngle" value="0" min="0" max="360" step="1">
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="label-with-value">
+                        <label>End Angle</label>
+                        <span class="value-display" id="endAngleVal">180°</span>
+                    </div>
+                    <div class="angle-picker">
+                        <svg class="angle-visual" viewBox="0 0 60 60" id="endAngleVisual"></svg>
+                        <input type="range" class="angle-slider" id="arcEndAngle" value="180" min="0" max="360" step="1">
+                    </div>
+                </div>
             </div>
-            <div class="control-group">
-                <label>Outer Radius</label>
-                <input type="number" id="arcRadius" value="150" min="10" max="1000">
-            </div>
-            <div class="control-group">
-                <label>Thickness (0 = simple arc)</label>
-                <input type="number" id="arcThickness" value="0" min="0" max="500">
-            </div>
-            <div class="control-group">
-                <label>Start Angle (degrees) <span class="value-display" id="startAngleVal">0°</span></label>
-                <input type="range" id="arcStartAngle" value="0" min="0" max="360" step="1">
-            </div>
-            <div class="control-group">
-                <label>End Angle (degrees) <span class="value-display" id="endAngleVal">180°</span></label>
-                <input type="range" id="arcEndAngle" value="180" min="0" max="360" step="1">
-            </div>
-            <div class="control-group">
-                <label>Stroke Width</label>
-                <input type="number" id="arcStrokeWidth" value="3" min="0" max="50">
-            </div>
-            <div class="control-group color-group">
-                <div>
+
+            <div class="section">
+                <div class="section-header">Appearance</div>
+
+                <div class="control-group">
+                    <div class="label-with-value">
+                        <label>Stroke Width</label>
+                        <span class="value-display" id="strokeWidthVal">3px</span>
+                    </div>
+                    <input type="range" id="arcStrokeWidth" value="3" min="0" max="50" step="1">
+                </div>
+
+                <div class="control-group">
                     <label>Stroke Color</label>
-                    <input type="color" id="arcColor" value="#007bff">
+                    <div class="color-control">
+                        <div class="color-input-wrapper">
+                            <input type="color" id="arcColor" value="#00d9ff">
+                        </div>
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="arcStrokeTransparent">
+                            <label for="arcStrokeTransparent">None</label>
+                        </div>
+                    </div>
                 </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="arcStrokeTransparent">
-                    <label>Transparent</label>
-                </div>
-            </div>
-            <div class="control-group color-group">
-                <div>
+
+                <div class="control-group">
                     <label>Fill Color</label>
-                    <input type="color" id="arcFillColor" value="#007bff">
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="arcFillTransparent" checked>
-                    <label>Transparent</label>
+                    <div class="color-control">
+                        <div class="color-input-wrapper">
+                            <input type="color" id="arcFillColor" value="#00d9ff">
+                        </div>
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="arcFillTransparent" checked>
+                            <label for="arcFillTransparent">None</label>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <h2>Text Settings</h2>
-            <div class="control-group">
-                <label>Text Content</label>
-                <input type="text" id="textContent" value="Curved Text on Arc" placeholder="Enter text">
-            </div>
-            <div class="control-group">
-                <label>Font Family</label>
-                <select id="fontFamily">
-                    <option value="Arial">Arial</option>
-                    <option value="Helvetica">Helvetica</option>
-                    <option value="Times New Roman">Times New Roman</option>
-                    <option value="Georgia">Georgia</option>
-                    <option value="Courier New">Courier New</option>
-                    <option value="Verdana">Verdana</option>
-                    <option value="Impact">Impact</option>
-                    <option value="Comic Sans MS">Comic Sans MS</option>
-                </select>
-            </div>
-            <div class="control-group">
-                <label>Font Size</label>
-                <input type="number" id="fontSize" value="24" min="8" max="200">
-            </div>
-            <div class="control-group">
-                <label>Font Weight</label>
-                <select id="fontWeight">
-                    <option value="normal">Normal</option>
-                    <option value="bold">Bold</option>
-                    <option value="lighter">Lighter</option>
-                    <option value="100">100</option>
-                    <option value="200">200</option>
-                    <option value="300">300</option>
-                    <option value="400">400</option>
-                    <option value="500">500</option>
-                    <option value="600">600</option>
-                    <option value="700">700</option>
-                    <option value="800">800</option>
-                    <option value="900">900</option>
-                </select>
-            </div>
-            <div class="control-group">
-                <label>Text Color</label>
-                <input type="color" id="textColor" value="#333333">
-            </div>
-            <div class="control-group">
-                <label>Text Offset (from arc)</label>
-                <input type="number" id="textOffset" value="0" min="-200" max="200">
+            <div class="section">
+                <div class="section-header">Curved Text</div>
+
+                <div class="control-group">
+                    <label>Text Content</label>
+                    <input type="text" id="textContent" value="Curved Text on Arc" placeholder="Enter text">
+                </div>
+
+                <div class="control-group">
+                    <label>Font Family</label>
+                    <select id="fontFamily">
+                        <option value="Arial">Arial</option>
+                        <option value="Helvetica">Helvetica</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                        <option value="Georgia">Georgia</option>
+                        <option value="Courier New">Courier New</option>
+                        <option value="Verdana">Verdana</option>
+                        <option value="Impact">Impact</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <div class="label-with-value">
+                        <label>Font Size</label>
+                        <span class="value-display" id="fontSizeVal">24px</span>
+                    </div>
+                    <input type="range" id="fontSize" value="24" min="8" max="120" step="1">
+                </div>
+
+                <div class="control-group">
+                    <label>Font Weight</label>
+                    <select id="fontWeight">
+                        <option value="300">Light (300)</option>
+                        <option value="400" selected>Normal (400)</option>
+                        <option value="500">Medium (500)</option>
+                        <option value="600">Semibold (600)</option>
+                        <option value="700">Bold (700)</option>
+                        <option value="900">Black (900)</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label>Text Color</label>
+                    <input type="color" id="textColor" value="#ffffff">
+                </div>
+
+                <div class="control-group">
+                    <div class="label-with-value">
+                        <label>Offset from Arc</label>
+                        <span class="value-display" id="textOffsetVal">0px</span>
+                    </div>
+                    <input type="range" id="textOffset" value="0" min="-100" max="100" step="1">
+                </div>
             </div>
 
-            <button onclick="downloadSVG()">Download SVG</button>
+            <button class="btn" onclick="downloadSVG()">↓ Download SVG</button>
         </div>
 
         <div class="preview">
-            <div id="svgPreview">
+            <div class="preview-area">
                 <svg id="svgCanvas"></svg>
             </div>
-            
-            <div>
-                <h2>SVG Code</h2>
+
+            <div class="code-panel">
+                <div class="code-header">
+                    <h3>SVG Code</h3>
+                    <button class="copy-btn" onclick="copySVGCode()">Copy</button>
+                </div>
                 <div class="code-output" id="svgCode"></div>
             </div>
         </div>
     </div>
 
     <script>
-        // Get all control elements
         const controls = {
             canvasWidth: document.getElementById('canvasWidth'),
             canvasHeight: document.getElementById('canvasHeight'),
@@ -321,18 +664,94 @@
             textOffset: document.getElementById('textOffset')
         };
 
-        // Update angle value displays
+        function updateValueDisplays() {
+            document.getElementById('radiusVal').textContent = controls.arcRadius.value + 'px';
+            document.getElementById('thicknessVal').textContent = controls.arcThickness.value + 'px';
+            document.getElementById('startAngleVal').textContent = controls.arcStartAngle.value + '°';
+            document.getElementById('endAngleVal').textContent = controls.arcEndAngle.value + '°';
+            document.getElementById('strokeWidthVal').textContent = controls.arcStrokeWidth.value + 'px';
+            document.getElementById('fontSizeVal').textContent = controls.fontSize.value + 'px';
+            document.getElementById('textOffsetVal').textContent = controls.textOffset.value + 'px';
+        }
+
+        function updateAngleVisual(svgId, angle) {
+            const svg = document.getElementById(svgId);
+            const cx = 30, cy = 30, r = 22;
+            const angleRad = (angle - 90) * Math.PI / 180;
+            const x = cx + r * Math.cos(angleRad);
+            const y = cy + r * Math.sin(angleRad);
+
+            // Clear existing content
+            while (svg.firstChild) {
+                svg.removeChild(svg.firstChild);
+            }
+
+            // Create circle
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', '30');
+            circle.setAttribute('cy', '30');
+            circle.setAttribute('r', '24');
+            circle.setAttribute('fill', 'none');
+            circle.setAttribute('stroke', 'rgba(0, 217, 255, 0.2)');
+            circle.setAttribute('stroke-width', '1');
+            svg.appendChild(circle);
+
+            // Create line
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', '30');
+            line.setAttribute('y1', '30');
+            line.setAttribute('x2', x.toString());
+            line.setAttribute('y2', y.toString());
+            line.setAttribute('stroke', '#00d9ff');
+            line.setAttribute('stroke-width', '2');
+            svg.appendChild(line);
+
+            // Create dot
+            const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            dot.setAttribute('cx', x.toString());
+            dot.setAttribute('cy', y.toString());
+            dot.setAttribute('r', '3');
+            dot.setAttribute('fill', '#00d9ff');
+            svg.appendChild(dot);
+        }
+
         controls.arcStartAngle.addEventListener('input', function() {
-            document.getElementById('startAngleVal').textContent = this.value + '°';
+            updateValueDisplays();
+            updateAngleVisual('startAngleVisual', this.value);
             updateSVG();
         });
 
         controls.arcEndAngle.addEventListener('input', function() {
-            document.getElementById('endAngleVal').textContent = this.value + '°';
+            updateValueDisplays();
+            updateAngleVisual('endAngleVisual', this.value);
             updateSVG();
         });
 
-        // Add event listeners to all controls
+        controls.arcRadius.addEventListener('input', function() {
+            updateValueDisplays();
+            updateSVG();
+        });
+
+        controls.arcThickness.addEventListener('input', function() {
+            updateValueDisplays();
+            updateSVG();
+        });
+
+        controls.arcStrokeWidth.addEventListener('input', function() {
+            updateValueDisplays();
+            updateSVG();
+        });
+
+        controls.fontSize.addEventListener('input', function() {
+            updateValueDisplays();
+            updateSVG();
+        });
+
+        controls.textOffset.addEventListener('input', function() {
+            updateValueDisplays();
+            updateSVG();
+        });
+
         Object.values(controls).forEach(control => {
             control.addEventListener('input', updateSVG);
             control.addEventListener('change', updateSVG);
@@ -350,7 +769,7 @@
             const start = polarToCartesian(x, y, radius, endAngle);
             const end = polarToCartesian(x, y, radius, startAngle);
             const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-            
+
             return [
                 "M", start.x, start.y,
                 "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y
@@ -358,26 +777,19 @@
         }
 
         function describeThickArc(x, y, innerRadius, outerRadius, startAngle, endAngle) {
-            // Get coordinates for all four corners of the thick arc
             const outerStart = polarToCartesian(x, y, outerRadius, endAngle);
             const outerEnd = polarToCartesian(x, y, outerRadius, startAngle);
             const innerStart = polarToCartesian(x, y, innerRadius, endAngle);
             const innerEnd = polarToCartesian(x, y, innerRadius, startAngle);
-            
+
             const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-            
-            // Create a closed path:
-            // 1. Start at outer arc start
-            // 2. Draw outer arc to outer arc end
-            // 3. Draw line to inner arc end
-            // 4. Draw inner arc back to inner arc start
-            // 5. Close path (line back to outer arc start)
+
             return [
-                "M", outerStart.x, outerStart.y,                              // Move to outer arc start
-                "A", outerRadius, outerRadius, 0, largeArcFlag, 0, outerEnd.x, outerEnd.y,  // Outer arc
-                "L", innerEnd.x, innerEnd.y,                                  // Line to inner arc end
-                "A", innerRadius, innerRadius, 0, largeArcFlag, 1, innerStart.x, innerStart.y,  // Inner arc (reversed)
-                "Z"                                                           // Close path
+                "M", outerStart.x, outerStart.y,
+                "A", outerRadius, outerRadius, 0, largeArcFlag, 0, outerEnd.x, outerEnd.y,
+                "L", innerEnd.x, innerEnd.y,
+                "A", innerRadius, innerRadius, 0, largeArcFlag, 1, innerStart.x, innerStart.y,
+                "Z"
             ].join(" ");
         }
 
@@ -402,20 +814,103 @@
             const textColor = controls.textColor.value;
             const textOffset = parseInt(controls.textOffset.value);
 
-            // Set SVG dimensions
             svg.setAttribute('width', width);
             svg.setAttribute('height', height);
             svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
 
             // Clear previous content
-            svg.innerHTML = '';
+            while (svg.firstChild) {
+                svg.removeChild(svg.firstChild);
+            }
 
-            // Create defs for the text path
+            // Draw canvas border
+            const border = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            border.setAttribute('x', '0');
+            border.setAttribute('y', '0');
+            border.setAttribute('width', width);
+            border.setAttribute('height', height);
+            border.setAttribute('fill', 'none');
+            border.setAttribute('stroke', 'rgba(0, 217, 255, 0.3)');
+            border.setAttribute('stroke-width', '2');
+            svg.appendChild(border);
+
+            // Draw coordinate grid
+            const gridSpacing = 50;
+            const gridGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+            // Vertical grid lines
+            for (let x = gridSpacing; x < width; x += gridSpacing) {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', x);
+                line.setAttribute('y1', '0');
+                line.setAttribute('x2', x);
+                line.setAttribute('y2', height);
+                line.setAttribute('stroke', 'rgba(0, 217, 255, 0.08)');
+                line.setAttribute('stroke-width', '1');
+                gridGroup.appendChild(line);
+            }
+
+            // Horizontal grid lines
+            for (let y = gridSpacing; y < height; y += gridSpacing) {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', '0');
+                line.setAttribute('y1', y);
+                line.setAttribute('x2', width);
+                line.setAttribute('y2', y);
+                line.setAttribute('stroke', 'rgba(0, 217, 255, 0.08)');
+                line.setAttribute('stroke-width', '1');
+                gridGroup.appendChild(line);
+            }
+            svg.appendChild(gridGroup);
+
+            // Draw coordinate system indicators
+            // (0,0) label at top-left
+            const originLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            originLabel.setAttribute('x', '8');
+            originLabel.setAttribute('y', '16');
+            originLabel.setAttribute('fill', 'rgba(0, 217, 255, 0.6)');
+            originLabel.setAttribute('font-size', '11');
+            originLabel.setAttribute('font-family', 'Courier Prime, monospace');
+            originLabel.setAttribute('font-weight', '700');
+            originLabel.textContent = '(0,0)';
+            svg.appendChild(originLabel);
+
+            // X axis label
+            const xAxisLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            xAxisLabel.setAttribute('x', '8');
+            xAxisLabel.setAttribute('y', '30');
+            xAxisLabel.setAttribute('fill', 'rgba(0, 217, 255, 0.6)');
+            xAxisLabel.setAttribute('font-size', '11');
+            xAxisLabel.setAttribute('font-family', 'Courier Prime, monospace');
+            xAxisLabel.setAttribute('font-weight', '700');
+            xAxisLabel.textContent = 'X →';
+            svg.appendChild(xAxisLabel);
+
+            // Y axis label
+            const yAxisLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            yAxisLabel.setAttribute('x', '8');
+            yAxisLabel.setAttribute('y', '44');
+            yAxisLabel.setAttribute('fill', 'rgba(0, 217, 255, 0.6)');
+            yAxisLabel.setAttribute('font-size', '11');
+            yAxisLabel.setAttribute('font-family', 'Courier Prime, monospace');
+            yAxisLabel.setAttribute('font-weight', '700');
+            yAxisLabel.textContent = 'Y ↓';
+            svg.appendChild(yAxisLabel);
+
+            // Bottom-right corner label
+            const cornerLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            cornerLabel.setAttribute('x', width - 8);
+            cornerLabel.setAttribute('y', height - 8);
+            cornerLabel.setAttribute('fill', 'rgba(0, 217, 255, 0.4)');
+            cornerLabel.setAttribute('font-size', '10');
+            cornerLabel.setAttribute('font-family', 'Courier Prime, monospace');
+            cornerLabel.setAttribute('text-anchor', 'end');
+            cornerLabel.textContent = `(${width},${height})`;
+            svg.appendChild(cornerLabel);
+
             const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-            
-            // Create the arc shape
+
             if (thickness > 0) {
-                // Create a thick arc (wedge/band shape)
                 const arcPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const pathData = describeThickArc(cx, cy, innerRadius, outerRadius, startAngle, endAngle);
                 arcPath.setAttribute('id', 'arcPath');
@@ -425,7 +920,6 @@
                 arcPath.setAttribute('stroke-width', strokeWidth);
                 svg.appendChild(arcPath);
             } else {
-                // Create a simple arc line
                 const arcPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const pathData = describeArc(cx, cy, outerRadius, startAngle, endAngle);
                 arcPath.setAttribute('id', 'arcPath');
@@ -436,7 +930,6 @@
                 svg.appendChild(arcPath);
             }
 
-            // Create path for text (on the outer arc)
             const textPathRadius = outerRadius + textOffset;
             const textPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             const textPathData = describeArc(cx, cy, textPathRadius, startAngle, endAngle);
@@ -447,7 +940,6 @@
             defs.appendChild(textPath);
             svg.insertBefore(defs, svg.firstChild);
 
-            // Create text element
             if (textContent) {
                 const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 text.setAttribute('font-family', fontFamily);
@@ -465,7 +957,6 @@
                 svg.appendChild(text);
             }
 
-            // Update code display
             updateCodeDisplay();
         }
 
@@ -473,8 +964,7 @@
             const svg = document.getElementById('svgCanvas');
             const serializer = new XMLSerializer();
             let svgString = serializer.serializeToString(svg);
-            
-            // Format the SVG string for better readability
+
             svgString = svgString
                 .replace(/></g, '>\n<')
                 .replace(/\s+/g, ' ')
@@ -483,14 +973,26 @@
             document.getElementById('svgCode').textContent = svgString;
         }
 
+        function copySVGCode() {
+            const codeText = document.getElementById('svgCode').textContent;
+            navigator.clipboard.writeText(codeText).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                btn.textContent = 'Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = 'Copy';
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+
         function downloadSVG() {
             const svg = document.getElementById('svgCanvas');
             const serializer = new XMLSerializer();
             let svgString = serializer.serializeToString(svg);
-            
-            // Add XML declaration
+
             svgString = '<?xml version="1.0" encoding="UTF-8"?>\n' + svgString;
-            
+
             const blob = new Blob([svgString], { type: 'image/svg+xml' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
@@ -502,7 +1004,72 @@
             URL.revokeObjectURL(url);
         }
 
-        // Initialize on load
+        function loadPreset(preset) {
+            switch(preset) {
+                case 'semicircle':
+                    controls.arcStartAngle.value = 0;
+                    controls.arcEndAngle.value = 180;
+                    controls.arcThickness.value = 0;
+                    break;
+                case 'quarter':
+                    controls.arcStartAngle.value = 0;
+                    controls.arcEndAngle.value = 90;
+                    controls.arcThickness.value = 0;
+                    break;
+                case 'three-quarter':
+                    controls.arcStartAngle.value = 0;
+                    controls.arcEndAngle.value = 270;
+                    controls.arcThickness.value = 0;
+                    break;
+            }
+            updateValueDisplays();
+            updateAngleVisual('startAngleVisual', controls.arcStartAngle.value);
+            updateAngleVisual('endAngleVisual', controls.arcEndAngle.value);
+            updateSVG();
+        }
+
+        // Drag to adjust number inputs
+        const numberInputs = document.querySelectorAll('input[type="number"]');
+        numberInputs.forEach(input => {
+            let isDragging = false;
+            let startY = 0;
+            let startValue = 0;
+
+            input.addEventListener('mousedown', function(e) {
+                isDragging = true;
+                startY = e.clientY;
+                startValue = parseFloat(this.value) || 0;
+                this.classList.add('dragging');
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (!isDragging) return;
+
+                const deltaY = startY - e.clientY;
+                const min = parseFloat(input.min) || -Infinity;
+                const max = parseFloat(input.max) || Infinity;
+                const step = parseFloat(input.step) || 1;
+
+                let newValue = startValue + (deltaY * step);
+                newValue = Math.max(min, Math.min(max, newValue));
+
+                input.value = Math.round(newValue);
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+
+            document.addEventListener('mouseup', function() {
+                if (isDragging) {
+                    isDragging = false;
+                    input.classList.remove('dragging');
+                }
+            });
+        });
+
+        // Initialize
+        updateValueDisplays();
+        updateAngleVisual('startAngleVisual', controls.arcStartAngle.value);
+        updateAngleVisual('endAngleVisual', controls.arcEndAngle.value);
         updateSVG();
     </script>
 </body>
