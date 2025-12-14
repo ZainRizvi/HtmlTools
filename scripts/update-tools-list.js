@@ -97,7 +97,10 @@ function updateIndexHtml() {
 
     // Replace the tools list
     // Match everything between <ul id="tools-list"> and </ul>
-    const pattern = /(<ul id="tools-list">)([\s\S]*?)(<\/ul>)/;
+    const pattern = /(<ul[^>]*id=["']tools-list["'][^>]*>)([\s\S]*?)(<\/ul>)/;
+    if (!pattern.test(content)) {
+      throw new Error('Could not find <ul id="tools-list"> block to update.');
+    }
     content = content.replace(pattern, `$1\n${toolsHtml}\n          $3`);
 
     // Write back to index.html

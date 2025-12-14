@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Full-screen toddler play space with colorful mouse magic and flying letters for every key press.">
+    <title>Toddler Time</title>
+    <!-- Created by an AI assistant session (ChatGPT) on request: playful mouse and keyboard interactions for toddlers. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&family=Sniglet:wght@400;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bgx: 50%;
+            --bgy: 50%;
+            --bg-1: #182a73;
+            --bg-2: #64d8ff;
+            --bg-3: #ffd1ff;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: "Fredoka", "Sniglet", "Comic Sans MS", system-ui, -apple-system, sans-serif;
+            background: radial-gradient(circle at var(--bgx) var(--bgy), var(--bg-1), var(--bg-2) 42%, var(--bg-3) 88%);
+            transition: background-position 0.08s ease-out;
+        }
+
+        #play-area {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            isolation: isolate;
+            cursor: crosshair;
+        }
+
+        .hud {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            padding: 12px 14px;
+            background: rgba(0, 0, 0, 0.35);
+            color: #fffaf3;
+            border-radius: 12px;
+            font-size: 15px;
+            line-height: 1.4;
+            backdrop-filter: blur(6px);
+            max-width: 320px;
+            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
+            z-index: 5;
+        }
+
+        .hud strong {
+            font-size: 18px;
+            letter-spacing: 0.5px;
+        }
+
+        .footer {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            background: rgba(0, 0, 0, 0.2);
+            color: #f7f7f7;
+            padding: 8px 10px;
+            border-radius: 10px;
+            font-size: 13px;
+            text-decoration: none;
+            backdrop-filter: blur(4px);
+            z-index: 5;
+        }
+
+        .floating-letter {
+            position: absolute;
+            left: var(--slot-left, 50%);
+            top: var(--slot-top, 55%);
+            transform: translate(-50%, -50%);
+            display: inline-block;
+            font-family: "Sniglet", "Fredoka", "Comic Sans MS", sans-serif;
+            font-size: clamp(220px, 24vw, 320px);
+            color: var(--letter-color, #fffdf7);
+            text-shadow:
+                0 0 22px rgba(0, 0, 0, 0.45),
+                0 0 32px rgba(0, 0, 0, 0.25),
+                0 0 48px var(--letter-color, #fffdf7);
+            pointer-events: none;
+            user-select: none;
+            filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.25));
+            opacity: 0;
+        }
+
+        .mouse-bubble {
+            position: absolute;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            pointer-events: none;
+            background: radial-gradient(circle, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0));
+            mix-blend-mode: screen;
+            filter: blur(0.5px);
+            opacity: 0.92;
+            box-shadow:
+                0 0 24px rgba(255, 255, 255, 0.95),
+                0 0 46px rgba(255, 255, 255, 0.55),
+                0 0 68px rgba(255, 255, 255, 0.35);
+        }
+
+        .mouse-bubble::after {
+            content: "";
+            position: absolute;
+            inset: 5px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        #letter-line {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100vw;
+            height: 100vh;
+            transform: none;
+            pointer-events: none;
+            z-index: 4;
+            overflow: visible;
+        }
+
+        @keyframes letter-pop {
+            0% {
+                transform: translate(-50%, -70%) scale(0.55) rotate(0deg);
+                opacity: 0;
+            }
+            35% {
+                transform: translate(-50%, -52%) scale(1.08) rotate(var(--spin));
+                opacity: 1;
+            }
+            55% {
+                transform: translate(-50%, -50%) scale(1) rotate(calc(var(--spin) * -0.4));
+                opacity: 1;
+            }
+            90% {
+                transform: translate(-50%, -48%) scale(0.98) rotate(calc(var(--spin) * 0.15));
+                opacity: 1;
+            }
+            100% {
+                transform: translate(-50%, -46%) scale(0.96) rotate(calc(var(--spin) * 0.25));
+                opacity: 1;
+            }
+        }
+
+        @keyframes bubble-pop {
+            0% {
+                transform: translate(-50%, -50%) scale(0.3);
+                opacity: 0;
+            }
+            20% {
+                opacity: 0.9;
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(1.8);
+                opacity: 0;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .hud {
+                max-width: 260px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div id="play-area" aria-live="polite" aria-label="Colorful play space for typing and moving the mouse">
+    <div class="hud">
+        <strong>Toddler Time</strong><br>
+        Move the mouse to splash light and bubbles.<br>
+        Press any letter or number to toss it across the sky.
+    </div>
+    <div id="letter-line" aria-live="polite"></div>
+    <a class="footer" href="https://github.com/zain/HtmlTools/blob/main/toddler-time.html" target="_blank" rel="noopener">
+        View source
+    </a>
+</div>
+
+<!-- MODULE: Tiny math + DOM helpers
+     Small helpers for randomness and element cleanup. Copy to any single-file tool that needs them.
+-->
+<script>
+    function randomRange(min, max) {
+        return Math.random() * (max - min) + min;
+    }
+
+    function removeOnFinish(animation, element) {
+        animation.addEventListener("finish", () => element.remove());
+    }
+</script>
+
+<!-- MODULE: Mouse sparkle painter
+     Updates the gradient focus point and spawns gentle bubbles following the cursor.
+     Copy this block to any tool that needs playful mouse-driven feedback.
+-->
+<script>
+    (function initMousePainter() {
+        const playArea = document.getElementById("play-area");
+        const rootStyle = document.documentElement.style;
+
+        function updateBackground(event) {
+            const xPercent = (event.clientX / window.innerWidth) * 100;
+            const yPercent = (event.clientY / window.innerHeight) * 100;
+            rootStyle.setProperty("--bgx", `${xPercent}%`);
+            rootStyle.setProperty("--bgy", `${yPercent}%`);
+        }
+
+        function spawnBubble(event) {
+            const bubble = document.createElement("div");
+            bubble.className = "mouse-bubble";
+            bubble.style.left = `${event.clientX}px`;
+            bubble.style.top = `${event.clientY}px`;
+            const hueShift = Math.floor(randomRange(0, 360));
+            bubble.style.background = `radial-gradient(circle, hsla(${hueShift}, 100%, 78%, 1), hsla(${hueShift}, 100%, 70%, 0.85), rgba(255,255,255,0))`;
+            bubble.style.boxShadow = `
+                0 0 24px hsla(${hueShift}, 100%, 80%, 0.95),
+                0 0 46px hsla(${hueShift}, 100%, 80%, 0.65),
+                0 0 68px hsla(${hueShift}, 100%, 80%, 0.35)`;
+            bubble.style.filter = "blur(0.4px)";
+
+            playArea.appendChild(bubble);
+
+            const driftX = randomRange(-40, 40);
+            const driftY = randomRange(-60, 20);
+            const animation = bubble.animate([
+                { transform: "translate(-50%, -50%) scale(0.4)", opacity: 0.0 },
+                { transform: `translate(calc(-50% + ${driftX}px), calc(-50% + ${driftY}px)) scale(1.6)`, opacity: 0.92 },
+                { transform: `translate(calc(-50% + ${driftX * 1.2}px), calc(-50% + ${driftY * 1.4}px)) scale(2.1)`, opacity: 0 }
+            ], {
+                duration: 900,
+                easing: "ease-out",
+                fill: "forwards"
+            });
+
+            removeOnFinish(animation, bubble);
+        }
+
+        let lastBubble = 0;
+        playArea.addEventListener("mousemove", (event) => {
+            updateBackground(event);
+            const now = performance.now();
+            if (now - lastBubble > 20) {
+                spawnBubble(event);
+                lastBubble = now;
+            }
+        });
+    })();
+</script>
+
+<!-- MODULE: Keyboard toss letters
+     Catches letter/number key presses and throws giant typewriter-style characters that line up.
+     Copy to any tool that needs lively typing feedback for kids.
+-->
+<script>
+    (function initKeyboardToss() {
+        const letterLine = document.getElementById("letter-line");
+        const MIN_LIFETIME = 3200; // Keep visible for at least a couple of seconds
+        const MAX_LIFETIME = 5800;
+        const MAX_SLOTS = 18;
+        const slots = Array(MAX_SLOTS).fill(null);
+        const letters = new Map();
+        const slotPositions = buildSlotPositions(MAX_SLOTS);
+
+        function isTypeableKey(event) {
+            return /^[a-z0-9]$/i.test(event.key);
+        }
+
+        function makeLetter(char) {
+            const letter = document.createElement("div");
+            letter.className = "floating-letter";
+            letter.textContent = char.toUpperCase();
+            const spin = `${randomRange(-22, 22)}deg`;
+            letter.style.setProperty("--spin", spin);
+            letter.style.setProperty("--slot-top", "55%");
+            letter.style.setProperty("--letter-color", colorForChar(char.toUpperCase()));
+            return letter;
+        }
+
+        function colorForChar(char) {
+            const palette = [
+                "#ffffff", "#ff5f5f", "#ffd166", "#06d6a0", "#26547c", "#ef476f",
+                "#7c3aed", "#ff9f1c", "#2ec4b6", "#ff6f91", "#5ce1e6", "#f9f871",
+                "#b5179e", "#4895ef", "#06a77d", "#f8961e", "#ee6c4d", "#8ac926",
+                "#ffcad4", "#9b5de5", "#f15bb5", "#00bbf9", "#fee440", "#6fffe9",
+                "#ffb5a7", "#e07a5f", "#81b29a", "#f4a261", "#e76f51", "#ff6d00",
+                "#00c2cb", "#f3722c", "#90be6d", "#577590", "#ffb703", "#219ebc"
+            ];
+            const code = char.charCodeAt(0);
+            return palette[code % palette.length];
+        }
+
+        function reserveSlot() {
+            const open = slots.findIndex(entry => entry === null);
+            if (open !== -1) return open;
+            // If all slots are used, reuse the oldest letter's slot
+            let oldestChar = null;
+            let oldestExpire = Infinity;
+            letters.forEach((info, char) => {
+                if (info.expiresAt < oldestExpire) {
+                    oldestExpire = info.expiresAt;
+                    oldestChar = char;
+                }
+            });
+            if (oldestChar) {
+                const info = letters.get(oldestChar);
+                fallLetter(info);
+                return info.slotIndex;
+            }
+            return Math.max(0, slots.length - 1);
+        }
+
+        function buildSlotPositions(count) {
+            const positions = [];
+            let attempts = 0;
+            while (positions.length < count && attempts < 400) {
+                const candidate = {
+                    left: randomRange(10, 90),
+                    top: randomRange(8, 88)
+                };
+                const farEnough = positions.every(pos => {
+                    const dx = pos.left - candidate.left;
+                    const dy = pos.top - candidate.top;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    return dist > 11; // avoid overlaps
+                });
+                if (farEnough) positions.push(candidate);
+                attempts++;
+            }
+            // If we failed to place enough, fill remaining in a loose grid
+            while (positions.length < count) {
+                positions.push({ left: 10 + (positions.length % 6) * 14, top: 12 + (positions.length % 5) * 16 });
+            }
+            return positions;
+        }
+
+        function placeLetter(letter, slotIndex) {
+            const pos = slotPositions[slotIndex];
+            letter.style.setProperty("--slot-left", `${pos.left}%`);
+            letter.style.setProperty("--slot-top", `${pos.top}%`);
+        }
+
+        function bounceLetter(info) {
+            info.duration = randomRange(MIN_LIFETIME, MAX_LIFETIME);
+            info.expiresAt = performance.now() + info.duration;
+            scheduleRemoval(info);
+            info.el.animate([
+                { transform: "translate(-50%, -55%) scale(0.92)", offset: 0 },
+                { transform: "translate(-50%, -63%) scale(1.05)", offset: 0.35 },
+                { transform: "translate(-50%, -55%) scale(1)", offset: 1 }
+            ], {
+                duration: 520,
+                easing: "ease-out"
+            });
+        }
+
+        function fallLetter(info) {
+            clearTimeout(info.timeoutId);
+            slots[info.slotIndex] = null;
+            letters.delete(info.char);
+            const fall = info.el.animate([
+                { transform: "translate(-50%, -45%) scale(0.98)", opacity: 1 },
+                { transform: "translate(-50%, 120vh) scale(0.92) rotate(12deg)", opacity: 0 }
+            ], {
+                duration: 900,
+                easing: "ease-in",
+                fill: "forwards"
+            });
+            removeOnFinish(fall, info.el);
+        }
+
+        function scheduleRemoval(info) {
+            clearTimeout(info.timeoutId);
+            info.timeoutId = setTimeout(() => fallLetter(info), info.duration);
+        }
+
+        function popIn(info) {
+            info.el.animate([
+                { transform: "translate(-50%, -70%) scale(0.55) rotate(0deg)", opacity: 0 },
+                { transform: "translate(-50%, -52%) scale(1.08) rotate(var(--spin))", opacity: 1, offset: 0.38 },
+                { transform: "translate(-50%, -50%) scale(1) rotate(calc(var(--spin) * -0.4))", opacity: 1, offset: 0.74 },
+                { transform: "translate(-50%, -48%) scale(0.98) rotate(calc(var(--spin) * 0.15))", opacity: 1, offset: 1 }
+            ], {
+                duration: 1200,
+                easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+                fill: "forwards"
+            });
+        }
+
+        function throwLetter(char) {
+            const existing = letters.get(char.toUpperCase());
+            if (existing) {
+                bounceLetter(existing);
+                return;
+            }
+
+            const letter = makeLetter(char);
+            const slotIndex = reserveSlot();
+            slots[slotIndex] = char.toUpperCase();
+            placeLetter(letter, slotIndex);
+            letterLine.appendChild(letter);
+
+            const duration = randomRange(MIN_LIFETIME, MAX_LIFETIME);
+            const info = {
+                char: char.toUpperCase(),
+                el: letter,
+                slotIndex,
+                duration,
+                timeoutId: null,
+                expiresAt: performance.now() + duration
+            };
+
+            letters.set(info.char, info);
+            popIn(info);
+            scheduleRemoval(info);
+        }
+
+        document.addEventListener("keydown", (event) => {
+            if (isTypeableKey(event)) {
+                event.preventDefault();
+                throwLetter(event.key);
+            }
+        });
+    })();
+</script>
+
+<!-- APPLICATION: Toddler Time bootstrap
+     Brings together mouse magic and keyboard tossing to fill the screen with playful feedback.
+-->
+<script>
+    (function startApp() {
+        // The modules self-initialize; this block exists for future settings or extensions.
+        const playArea = document.getElementById("play-area");
+        playArea.focus({ preventScroll: true });
+    })();
+</script>
+</body>
+</html>
