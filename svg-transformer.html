@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG Pan & Rotate Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .upload-section {
+            margin-bottom: 30px;
+        }
+
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            background: #fafafa;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-area.dragover {
+            border-color: #4CAF50;
+            background: #f0f8f0;
+        }
+
+        .upload-area input[type="file"] {
+            display: none;
+        }
+
+        .paste-area {
+            margin-top: 15px;
+        }
+
+        .paste-area textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .paste-btn {
+            margin-top: 10px;
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .paste-btn:hover {
+            background: #45a049;
+        }
+
+        .viewer-section {
+            display: none;
+            margin-top: 30px;
+        }
+
+        .viewer-section.active {
+            display: block;
+        }
+
+        .svg-container {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 20px;
+            background: #fff;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: auto;
+            margin-bottom: 20px;
+        }
+
+        .info-panel {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .info-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .info-item {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #666;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            font-size: 16px;
+            color: #333;
+            font-family: monospace;
+        }
+
+        .controls-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .control-panel {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 4px;
+        }
+
+        .control-panel h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 18px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .control-group input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+        }
+
+        .slider-value {
+            text-align: center;
+            margin-top: 5px;
+            font-family: monospace;
+            color: #333;
+        }
+
+        .reset-btn {
+            margin-top: 15px;
+            padding: 8px 16px;
+            background: #ff5722;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            width: 100%;
+        }
+
+        .reset-btn:hover {
+            background: #e64a19;
+        }
+
+        .export-section {
+            margin-top: 20px;
+            background: #f0f8ff;
+            padding: 20px;
+            border-radius: 4px;
+            border: 1px solid #b3d9ff;
+        }
+
+        .export-section h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 18px;
+        }
+
+        #svgOutput {
+            width: 100%;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid #b3d9ff;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            background: white;
+            margin-bottom: 15px;
+            resize: vertical;
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .export-btn {
+            padding: 12px 24px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        .export-btn:hover {
+            background: #1976D2;
+        }
+
+        .export-btn.success {
+            background: #4CAF50;
+        }
+
+        .export-btn.success:hover {
+            background: #45a049;
+        }
+
+        @media (max-width: 768px) {
+            .controls-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .export-buttons {
+                flex-direction: column;
+            }
+            
+            .export-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SVG Pan & Rotate Tool</h1>
+        
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <input type="file" id="fileInput" accept=".svg">
+                <p>📁 Click to upload SVG file or drag & drop here</p>
+            </div>
+            
+            <div class="paste-area">
+                <label for="svgPaste" style="display: block; margin-bottom: 5px; color: #666;">Or paste SVG code:</label>
+                <textarea id="svgPaste" placeholder="Paste your SVG XML code here..."></textarea>
+                <button class="paste-btn" id="pasteBtn">Load SVG</button>
+            </div>
+        </div>
+
+        <div class="viewer-section" id="viewerSection">
+            <div class="svg-container" id="svgContainer">
+                <!-- SVG will be rendered here -->
+            </div>
+
+            <div class="info-panel">
+                <h3 style="margin-bottom: 15px;">Image Information</h3>
+                <div class="info-row">
+                    <div class="info-item">
+                        <div class="info-label">Left-most X</div>
+                        <div class="info-value" id="minX">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Right-most X</div>
+                        <div class="info-value" id="maxX">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Highest Y (min)</div>
+                        <div class="info-value" id="minY">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Lowest Y (max)</div>
+                        <div class="info-value" id="maxY">-</div>
+                    </div>
+                </div>
+                <div class="info-row">
+                    <div class="info-item">
+                        <div class="info-label">Center Point (X, Y)</div>
+                        <div class="info-value" id="centerPoint">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Width × Height</div>
+                        <div class="info-value" id="dimensions">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls-section">
+                <div class="control-panel">
+                    <h3>Pan</h3>
+                    <div class="control-group">
+                        <label for="panX">X Offset:</label>
+                        <input type="number" id="panX" value="0" step="1">
+                    </div>
+                    <div class="control-group">
+                        <label for="panY">Y Offset:</label>
+                        <input type="number" id="panY" value="0" step="1">
+                    </div>
+                    <button class="reset-btn" id="resetPan">Reset Pan</button>
+                </div>
+
+                <div class="control-panel">
+                    <h3>Rotate</h3>
+                    <div class="control-group">
+                        <label for="rotateCenterX">Center X:</label>
+                        <input type="number" id="rotateCenterX" value="0" step="0.1">
+                    </div>
+                    <div class="control-group">
+                        <label for="rotateCenterY">Center Y:</label>
+                        <input type="number" id="rotateCenterY" value="0" step="0.1">
+                    </div>
+                    <div class="control-group">
+                        <label for="rotateAngle">Rotation (degrees):</label>
+                        <input type="range" id="rotateAngle" min="-180" max="180" value="0" step="1">
+                        <div class="slider-value"><span id="angleValue">0</span>°</div>
+                    </div>
+                    <button class="reset-btn" id="resetRotate">Reset Rotation</button>
+                </div>
+            </div>
+
+            <div class="export-section">
+                <h3>Export Transformed SVG</h3>
+                <textarea id="svgOutput" readonly></textarea>
+                <div class="export-buttons">
+                    <button class="export-btn" id="copySvgBtn">📋 Copy SVG to Clipboard</button>
+                    <button class="export-btn" id="downloadSvgBtn">💾 Download SVG</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let originalSvg = null;
+        let originalBBox = null;
+        let svgElement = null;
+        let initialCenter = null;
+
+        // Upload area interactions
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const svgPaste = document.getElementById('svgPaste');
+        const pasteBtn = document.getElementById('pasteBtn');
+        const svgContainer = document.getElementById('svgContainer');
+        const viewerSection = document.getElementById('viewerSection');
+
+        // Controls
+        const panX = document.getElementById('panX');
+        const panY = document.getElementById('panY');
+        const rotateCenterX = document.getElementById('rotateCenterX');
+        const rotateCenterY = document.getElementById('rotateCenterY');
+        const rotateAngle = document.getElementById('rotateAngle');
+        const angleValue = document.getElementById('angleValue');
+        const resetPan = document.getElementById('resetPan');
+        const resetRotate = document.getElementById('resetRotate');
+        const copySvgBtn = document.getElementById('copySvgBtn');
+        const downloadSvgBtn = document.getElementById('downloadSvgBtn');
+        const svgOutput = document.getElementById('svgOutput');
+
+        // Upload area click
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file && file.type === 'image/svg+xml') {
+                const reader = new FileReader();
+                reader.onload = (e) => loadSvg(e.target.result);
+                reader.readAsText(file);
+            }
+        });
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const file = e.dataTransfer.files[0];
+            if (file && file.type === 'image/svg+xml') {
+                const reader = new FileReader();
+                reader.onload = (e) => loadSvg(e.target.result);
+                reader.readAsText(file);
+            }
+        });
+
+        // Paste button
+        pasteBtn.addEventListener('click', () => {
+            const svgCode = svgPaste.value.trim();
+            if (svgCode) {
+                loadSvg(svgCode);
+            }
+        });
+
+        // Load SVG function
+        function loadSvg(svgString) {
+            try {
+                // Parse SVG
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(svgString, 'image/svg+xml');
+                const parsedSvg = doc.querySelector('svg');
+                
+                if (!parsedSvg) {
+                    alert('Invalid SVG content');
+                    return;
+                }
+
+                // Store original SVG
+                originalSvg = svgString;
+                
+                // Clear container and add SVG
+                svgContainer.innerHTML = '';
+                svgElement = parsedSvg.cloneNode(true);
+                svgContainer.appendChild(svgElement);
+
+                // Small delay to ensure SVG is rendered before calculating bbox
+                setTimeout(() => {
+                    // Get initial bounding box
+                    const bbox = svgElement.getBBox();
+                    initialCenter = {
+                        x: bbox.x + bbox.width / 2,
+                        y: bbox.y + bbox.height / 2
+                    };
+                    
+                    // Update bounding box info
+                    updateBoundingBox();
+                    
+                    // Update SVG output
+                    updateSvgOutput();
+                    
+                    // Reset controls
+                    resetControls();
+                }, 10);
+                
+                // Show viewer section
+                viewerSection.classList.add('active');
+                
+            } catch (error) {
+                console.error('Error loading SVG:', error);
+                alert('Error loading SVG: ' + error.message);
+            }
+        }
+
+        // Calculate bounding box of transformed SVG
+        function updateBoundingBox() {
+            try {
+                // Get all direct children and calculate their combined bbox
+                const children = svgElement.children;
+                if (children.length === 0) return;
+                
+                let minX = Infinity, minY = Infinity;
+                let maxX = -Infinity, maxY = -Infinity;
+                
+                for (let child of children) {
+                    try {
+                        const bbox = child.getBBox();
+                        
+                        // Check if there are transforms
+                        const transform = child.transform.baseVal;
+                        let matrix = svgElement.createSVGMatrix();
+                        
+                        if (transform.numberOfItems > 0) {
+                            // Get the transform matrix if transforms exist
+                            for (let i = 0; i < transform.numberOfItems; i++) {
+                                matrix = matrix.multiply(transform.getItem(i).matrix);
+                            }
+                        }
+                        // If no transforms, matrix is identity matrix (no change)
+                        
+                        // Transform all four corners of the bbox
+                        const corners = [
+                            {x: bbox.x, y: bbox.y},
+                            {x: bbox.x + bbox.width, y: bbox.y},
+                            {x: bbox.x, y: bbox.y + bbox.height},
+                            {x: bbox.x + bbox.width, y: bbox.y + bbox.height}
+                        ];
+                        
+                        corners.forEach(corner => {
+                            const point = svgElement.createSVGPoint();
+                            point.x = corner.x;
+                            point.y = corner.y;
+                            const transformedPoint = point.matrixTransform(matrix);
+                            
+                            minX = Math.min(minX, transformedPoint.x);
+                            minY = Math.min(minY, transformedPoint.y);
+                            maxX = Math.max(maxX, transformedPoint.x);
+                            maxY = Math.max(maxY, transformedPoint.y);
+                        });
+                    } catch (e) {
+                        // If getBBox fails for a child, skip it
+                        console.warn('Could not get bbox for child:', e);
+                    }
+                }
+                
+                // Ensure we have valid bounds
+                if (minX === Infinity || maxX === -Infinity) {
+                    console.warn('Could not calculate valid bounding box');
+                    return;
+                }
+                
+                originalBBox = {
+                    minX: minX,
+                    maxX: maxX,
+                    minY: minY,
+                    maxY: maxY,
+                    width: maxX - minX,
+                    height: maxY - minY,
+                    centerX: (minX + maxX) / 2,
+                    centerY: (minY + maxY) / 2
+                };
+
+                updateInfo();
+                
+            } catch (error) {
+                console.error('Error calculating bounding box:', error);
+            }
+        }
+
+        // Update info display
+        function updateInfo() {
+            document.getElementById('minX').textContent = originalBBox.minX.toFixed(2);
+            document.getElementById('maxX').textContent = originalBBox.maxX.toFixed(2);
+            document.getElementById('minY').textContent = originalBBox.minY.toFixed(2);
+            document.getElementById('maxY').textContent = originalBBox.maxY.toFixed(2);
+            document.getElementById('centerPoint').textContent = 
+                `${originalBBox.centerX.toFixed(2)}, ${originalBBox.centerY.toFixed(2)}`;
+            document.getElementById('dimensions').textContent = 
+                `${originalBBox.width.toFixed(2)} × ${originalBBox.height.toFixed(2)}`;
+        }
+
+        // Apply transformations
+        function applyTransform() {
+            if (!svgElement) return;
+
+            const pX = parseFloat(panX.value) || 0;
+            const pY = parseFloat(panY.value) || 0;
+            const angle = parseFloat(rotateAngle.value) || 0;
+            const cX = parseFloat(rotateCenterX.value) || 0;
+            const cY = parseFloat(rotateCenterY.value) || 0;
+
+            // Build transform string
+            let transform = '';
+            
+            if (pX !== 0 || pY !== 0) {
+                transform += `translate(${pX}, ${pY}) `;
+            }
+            
+            if (angle !== 0) {
+                transform += `rotate(${angle}, ${cX}, ${cY})`;
+            }
+
+            // Apply transform to all direct children of SVG
+            const children = svgElement.children;
+            for (let child of children) {
+                if (transform) {
+                    child.setAttribute('transform', transform);
+                } else {
+                    child.removeAttribute('transform');
+                }
+            }
+            
+            // Update bounding box and export display
+            updateBoundingBox();
+            updateSvgOutput();
+        }
+
+        // Event listeners for controls
+        panX.addEventListener('input', applyTransform);
+        panY.addEventListener('input', applyTransform);
+        rotateCenterX.addEventListener('input', applyTransform);
+        rotateCenterY.addEventListener('input', applyTransform);
+        
+        rotateAngle.addEventListener('input', () => {
+            angleValue.textContent = rotateAngle.value;
+            applyTransform();
+        });
+
+        // Reset buttons
+        resetPan.addEventListener('click', () => {
+            panX.value = 0;
+            panY.value = 0;
+            applyTransform();
+        });
+
+        resetRotate.addEventListener('click', () => {
+            rotateAngle.value = 0;
+            angleValue.textContent = '0';
+            if (initialCenter) {
+                rotateCenterX.value = initialCenter.x.toFixed(2);
+                rotateCenterY.value = initialCenter.y.toFixed(2);
+            }
+            applyTransform();
+        });
+
+        // Reset all controls
+        function resetControls() {
+            panX.value = 0;
+            panY.value = 0;
+            rotateAngle.value = 0;
+            angleValue.textContent = '0';
+            if (initialCenter) {
+                rotateCenterX.value = initialCenter.x.toFixed(2);
+                rotateCenterY.value = initialCenter.y.toFixed(2);
+            }
+        }
+
+        // Update SVG output textarea
+        function updateSvgOutput() {
+            const svgString = getTransformedSvg();
+            if (svgString) {
+                svgOutput.value = svgString;
+            }
+        }
+
+        // Get transformed SVG as string
+        function getTransformedSvg() {
+            if (!svgElement) return null;
+            
+            // Clone the SVG element
+            const clonedSvg = svgElement.cloneNode(true);
+            
+            // Create a temporary container
+            const tempDiv = document.createElement('div');
+            tempDiv.appendChild(clonedSvg);
+            
+            // Get the SVG string
+            return tempDiv.innerHTML;
+        }
+
+        // Copy SVG to clipboard
+        copySvgBtn.addEventListener('click', async () => {
+            const svgString = svgOutput.value;
+            if (!svgString) {
+                alert('No SVG loaded');
+                return;
+            }
+
+            try {
+                await navigator.clipboard.writeText(svgString);
+                
+                // Visual feedback
+                const originalText = copySvgBtn.textContent;
+                copySvgBtn.textContent = '✓ Copied!';
+                copySvgBtn.classList.add('success');
+                
+                setTimeout(() => {
+                    copySvgBtn.textContent = originalText;
+                    copySvgBtn.classList.remove('success');
+                }, 2000);
+                
+            } catch (error) {
+                // Fallback for older browsers
+                svgOutput.select();
+                
+                try {
+                    document.execCommand('copy');
+                    
+                    // Visual feedback
+                    const originalText = copySvgBtn.textContent;
+                    copySvgBtn.textContent = '✓ Copied!';
+                    copySvgBtn.classList.add('success');
+                    
+                    setTimeout(() => {
+                        copySvgBtn.textContent = originalText;
+                        copySvgBtn.classList.remove('success');
+                    }, 2000);
+                } catch (err) {
+                    alert('Failed to copy to clipboard');
+                }
+            }
+        });
+
+        // Download SVG
+        downloadSvgBtn.addEventListener('click', () => {
+            const svgString = getTransformedSvg();
+            if (!svgString) {
+                alert('No SVG loaded');
+                return;
+            }
+
+            // Create blob
+            const blob = new Blob([svgString], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            
+            // Create download link
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'transformed-image.svg';
+            document.body.appendChild(a);
+            a.click();
+            
+            // Cleanup
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            // Visual feedback
+            const originalText = downloadSvgBtn.textContent;
+            downloadSvgBtn.textContent = '✓ Downloaded!';
+            downloadSvgBtn.classList.add('success');
+            
+            setTimeout(() => {
+                downloadSvgBtn.textContent = originalText;
+                downloadSvgBtn.classList.remove('success');
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
