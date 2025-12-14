@@ -58,6 +58,135 @@ If you do add shared code:
 - Keep it **dependency-light** and well-named.
 - Prefer **copy/pasteability** of tools over over-abstraction.
 
+## Code organization and modularity
+
+### Write modular, reusable code
+
+Organize your JavaScript into separate `<script>` blocks, each representing a distinct module:
+
+```html
+<!-- MODULE: Clipboard Copy with Visual Feedback
+     Generic copy-to-clipboard function with button state feedback.
+     Copy this entire <script> block into any tool that needs this functionality.
+-->
+<script>
+    function copyToClipboard(text, button, options = {}) {
+        // Implementation...
+    }
+</script>
+
+<!-- MODULE: File Download Helper
+     Generic function to trigger downloads of any blob/file.
+     Works with SVG, JSON, CSV, images, etc.
+-->
+<script>
+    function downloadFile(content, filename, mimeType) {
+        // Implementation...
+    }
+</script>
+
+<!-- APPLICATION: My Tool Main Logic
+     This section ties together the reusable modules above.
+-->
+<script>
+    // Tool-specific code here
+</script>
+```
+
+**Key principles:**
+
+- **One module per `<script>` block** - Each block should have a single, clear responsibility
+- **Order from generic to specific** - Start with utilities (math, clipboard, download), end with application logic
+- **Self-contained modules** - Each block should be independently copy-pasteable
+- **Document each module** - Header comment explaining what it does and where it can be reused
+
+### Copy/pasting is encouraged
+
+**Actively copy `<script>` blocks between tools** when you need similar functionality:
+
+- ✅ **Do this**: Copy the entire "Clipboard Copy" module from one tool to another
+- ✅ **Do this**: Browse other tools in this repo to find reusable modules
+- ❌ **Avoid**: Creating `lib/` files for one-off functionality
+- ❌ **Avoid**: Complex dependencies between tools
+
+This repo prefers **copy-paste modularity** over shared libraries because:
+- Each tool remains self-contained and easy to understand
+- No risk of breaking Tool A when modifying Tool B
+- Easy to customize copied code for specific needs
+- Tools stay simple and auditable
+
+**When to use `lib/` vs copy/paste:**
+- Use `lib/` only when code is used by 2+ tools AND is stable
+- Default to copy/paste for everything else
+- It's okay to have slightly different versions of similar code in different tools
+
+### Module documentation standards
+
+**Module header comments:**
+
+```html
+<!-- MODULE: [Name]
+     [Brief description of what this module does]
+     Copy this entire <script> block into any tool that needs [specific capability].
+-->
+```
+
+**Function documentation (JSDoc style):**
+
+```javascript
+/**
+ * Convert polar coordinates to cartesian coordinates
+ * @param {number} centerX - X coordinate of circle center
+ * @param {number} centerY - Y coordinate of circle center
+ * @param {number} radius - Distance from center
+ * @param {number} angleInDegrees - Angle in degrees (0° = top, clockwise)
+ * @returns {{x: number, y: number}} Cartesian coordinates
+ */
+function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
+    // Implementation...
+}
+```
+
+### Write generic, configurable code
+
+Make modules reusable by avoiding hard-coded values:
+
+**❌ Bad: Hard-coded for one tool**
+```javascript
+function updateDisplay() {
+    document.getElementById('radiusVal').textContent = radius + 'px';
+    document.getElementById('angleVal').textContent = angle + '°';
+}
+```
+
+**✅ Good: Generic and configurable**
+```javascript
+/**
+ * Update a display element with a formatted value
+ * @param {string} elementId - ID of the display element
+ * @param {number} value - Value to display
+ * @param {string} unit - Unit suffix (default: '')
+ */
+function updateDisplay(elementId, value, unit = '') {
+    document.getElementById(elementId).textContent = value + unit;
+}
+```
+
+**Use options objects with defaults:**
+
+```javascript
+function createWidget(container, options = {}) {
+    const {
+        width = 100,
+        height = 100,
+        color = '#000000',
+        onChange = () => {}
+    } = options;
+
+    // Implementation using the options
+}
+```
+
 ## Tool UX patterns (high leverage)
 
 - **Copy/paste first**:
@@ -153,4 +282,4 @@ Use this when fetch/CORS behavior differs between `file://` and `http://`.
 
 ## Sync note
 
-This file (`AGENTS.md`) should be kept identical to `CLAUDE.md` in this repo. Different AI systems read one vs. the other. If either file is updated, copy the contents to the other to maintain consistency.
+This file (`CLAUDE.md`) should be kept identical to `AGENTS.md` in this repo. Different AI systems read one vs. the other. If either file is updated, copy the contents to the other to maintain consistency.
