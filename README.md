@@ -1,4 +1,4 @@
-# Hampton-s
+# HtmlTools
 
 This repo is (re)booting as a home for **HTML tools**: small, useful web apps that are **static-hostable** and usually live as **one `.html` file** with inline JavaScript and CSS.
 
