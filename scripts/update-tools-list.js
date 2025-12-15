@@ -105,6 +105,10 @@ function updateIndexHtml() {
 
     // 3) Update that section, overwriting whatever was there before
     const updatedContent = content.replace(pattern, `${match[1]}\n${toolsHtml}\n          ${match[3]}`);
+    if (updatedContent === content) {
+      return;
+    }
+
     fs.writeFileSync(INDEX_PATH, updatedContent, 'utf8');
 
     console.log(`✓ Updated tools list in index.html`);
