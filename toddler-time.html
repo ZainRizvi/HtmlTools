@@ -16,6 +16,12 @@
             --bg-1: #05060f;
             --bg-2: #0b1c2f;
             --bg-3: #122b45;
+            --sparkle-lightness: 78;
+            --sparkle-opacity: 0.92;
+            --sparkle-hue-base: 190;
+            --sparkle-hue-range: 260;
+            --shadow-1: rgba(0, 0, 0, 0.45);
+            --shadow-2: rgba(0, 0, 0, 0.25);
         }
 
         * {
@@ -31,7 +37,7 @@
             overflow: hidden;
             font-family: "Fredoka", "Sniglet", "Comic Sans MS", system-ui, -apple-system, sans-serif;
             background: radial-gradient(circle at var(--bgx) var(--bgy), var(--bg-1), var(--bg-2) 44%, var(--bg-3) 96%);
-            transition: background-position 0.08s ease-out;
+            transition: background-position 0.08s ease-out, background 1.2s ease;
         }
 
         #play-area {
@@ -135,8 +141,8 @@
             font-size: clamp(220px, 24vw, 320px);
             color: var(--letter-color, #fffdf7);
             text-shadow:
-                0 0 22px rgba(0, 0, 0, 0.45),
-                0 0 32px rgba(0, 0, 0, 0.25),
+                0 0 22px var(--shadow-1),
+                0 0 32px var(--shadow-2),
                 0 0 48px var(--letter-color, #fffdf7);
             pointer-events: none;
             user-select: none;
@@ -256,6 +262,125 @@
     }
 </script>
 
+<!-- MODULE: Theme cycler
+     Cycles through a set of high-contrast background + sparkle themes when Shift is pressed.
+     Letter colors stay untouched; shadows and sparkles adjust per theme for readability.
+-->
+<script>
+    (function initThemeCycler() {
+        const rootStyle = document.documentElement.style;
+        const body = document.body;
+
+        const themes = [
+            {
+                name: "Midnight Lagoon",
+                bg1: "#05060f",
+                bg2: "#0b1c2f",
+                bg3: "#122b45",
+                sparkles: { base: 190, range: 260, lightness: 78, opacity: 0.92 },
+                shadows: { one: "rgba(0, 0, 0, 0.45)", two: "rgba(0, 0, 0, 0.25)" }
+            },
+            {
+                name: "Ember Glow",
+                bg1: "#0c0a12",
+                bg2: "#2c1424",
+                bg3: "#442735",
+                sparkles: { base: 18, range: 120, lightness: 82, opacity: 0.9 },
+                shadows: { one: "rgba(0, 0, 0, 0.52)", two: "rgba(0, 0, 0, 0.3)" }
+            },
+            {
+                name: "Forest Canopy",
+                bg1: "#06130c",
+                bg2: "#0f2b1f",
+                bg3: "#1f4630",
+                sparkles: { base: 130, range: 120, lightness: 80, opacity: 0.88 },
+                shadows: { one: "rgba(0, 0, 0, 0.48)", two: "rgba(0, 0, 0, 0.28)" }
+            },
+            {
+                name: "Deep Ocean",
+                bg1: "#041019",
+                bg2: "#0b2436",
+                bg3: "#145277",
+                sparkles: { base: 200, range: 160, lightness: 82, opacity: 0.9 },
+                shadows: { one: "rgba(0, 0, 0, 0.46)", two: "rgba(0, 0, 0, 0.27)" }
+            },
+            {
+                name: "Candy Nebula",
+                bg1: "#130a1e",
+                bg2: "#27163e",
+                bg3: "#4c2c75",
+                sparkles: { base: 300, range: 200, lightness: 82, opacity: 0.9 },
+                shadows: { one: "rgba(0, 0, 0, 0.55)", two: "rgba(0, 0, 0, 0.32)" }
+            },
+            {
+                name: "Sunset Drift",
+                bg1: "#1a0c0b",
+                bg2: "#32161c",
+                bg3: "#553028",
+                sparkles: { base: 18, range: 100, lightness: 80, opacity: 0.88 },
+                shadows: { one: "rgba(0, 0, 0, 0.5)", two: "rgba(0, 0, 0, 0.3)" }
+            },
+            {
+                name: "Aurora Teal",
+                bg1: "#08151d",
+                bg2: "#0c2f3a",
+                bg3: "#11575b",
+                sparkles: { base: 170, range: 180, lightness: 78, opacity: 0.9 },
+                shadows: { one: "rgba(0, 0, 0, 0.46)", two: "rgba(0, 0, 0, 0.27)" }
+            },
+            {
+                name: "Orchid Night",
+                bg1: "#1a0d16",
+                bg2: "#2c1630",
+                bg3: "#452448",
+                sparkles: { base: 320, range: 150, lightness: 83, opacity: 0.9 },
+                shadows: { one: "rgba(0, 0, 0, 0.54)", two: "rgba(0, 0, 0, 0.3)" }
+            },
+            {
+                name: "Glacier",
+                bg1: "#0a0f16",
+                bg2: "#10263a",
+                bg3: "#1c4e68",
+                sparkles: { base: 205, range: 120, lightness: 82, opacity: 0.88 },
+                shadows: { one: "rgba(0, 0, 0, 0.46)", two: "rgba(0, 0, 0, 0.26)" }
+            },
+            {
+                name: "Citrus Grove",
+                bg1: "#0b120b",
+                bg2: "#12311f",
+                bg3: "#1f4c33",
+                sparkles: { base: 105, range: 120, lightness: 80, opacity: 0.88 },
+                shadows: { one: "rgba(0, 0, 0, 0.48)", two: "rgba(0, 0, 0, 0.28)" }
+            }
+        ];
+
+        let current = 0;
+
+        function applyTheme(theme) {
+            const { sparkles, shadows } = theme;
+            rootStyle.setProperty("--bg-1", theme.bg1);
+            rootStyle.setProperty("--bg-2", theme.bg2);
+            rootStyle.setProperty("--bg-3", theme.bg3);
+            rootStyle.setProperty("--sparkle-hue-base", sparkles.base);
+            rootStyle.setProperty("--sparkle-hue-range", sparkles.range);
+            rootStyle.setProperty("--sparkle-lightness", sparkles.lightness);
+            rootStyle.setProperty("--sparkle-opacity", sparkles.opacity);
+            rootStyle.setProperty("--shadow-1", shadows.one);
+            rootStyle.setProperty("--shadow-2", shadows.two);
+            body.style.background = `radial-gradient(circle at var(--bgx) var(--bgy), ${theme.bg1}, ${theme.bg2} 44%, ${theme.bg3} 96%)`;
+        }
+
+        applyTheme(themes[current]);
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Shift" && !event.repeat) {
+                current = (current + 1) % themes.length;
+                applyTheme(themes[current]);
+            }
+        });
+    })();
+</script>
+
 <!-- MODULE: Mouse sparkle painter
      Updates the gradient focus point and spawns gentle bubbles following the cursor.
      Copy this block to any tool that needs playful mouse-driven feedback.
@@ -277,12 +402,20 @@
             bubble.className = "mouse-bubble";
             bubble.style.left = `${x}px`;
             bubble.style.top = `${y}px`;
-            const hueShift = Math.floor(randomRange(0, 360));
-            bubble.style.background = `radial-gradient(circle, hsla(${hueShift}, 100%, 78%, 1), hsla(${hueShift}, 100%, 70%, 0.85), rgba(255,255,255,0))`;
+            const computed = getComputedStyle(document.documentElement);
+            const baseHue = parseFloat(computed.getPropertyValue("--sparkle-hue-base")) || 180;
+            const hueRange = parseFloat(computed.getPropertyValue("--sparkle-hue-range")) || 240;
+            const hue = ((randomRange(baseHue - hueRange / 2, baseHue + hueRange / 2) % 360) + 360) % 360;
+            const sparkleLightness = parseFloat(computed.getPropertyValue("--sparkle-lightness")) || 78;
+            const sparkleOpacity = parseFloat(computed.getPropertyValue("--sparkle-opacity")) || 0.92;
+            const glowLightness = Math.min(sparkleLightness + 8, 96);
+            const midLightness = Math.max(sparkleLightness - 10, 48);
+
+            bubble.style.background = `radial-gradient(circle, hsla(${hue}, 100%, ${glowLightness}%, 1), hsla(${hue}, 100%, ${sparkleLightness}%, ${sparkleOpacity}), hsla(${hue}, 100%, ${midLightness}%, 0))`;
             bubble.style.boxShadow = `
-                0 0 24px hsla(${hueShift}, 100%, 80%, 0.95),
-                0 0 46px hsla(${hueShift}, 100%, 80%, 0.65),
-                0 0 68px hsla(${hueShift}, 100%, 80%, 0.35)`;
+                0 0 24px hsla(${hue}, 100%, ${glowLightness}%, ${Math.min(sparkleOpacity + 0.06, 1)}),
+                0 0 46px hsla(${hue}, 100%, ${sparkleLightness}%, ${Math.max(sparkleOpacity - 0.12, 0.3)}),
+                0 0 68px hsla(${hue}, 100%, ${midLightness}%, 0.32)`;
             bubble.style.filter = "blur(0.4px)";
 
             playArea.appendChild(bubble);
