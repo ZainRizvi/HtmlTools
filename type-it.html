@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A typing playground for children that recognizes words and shows emoji illustrations with a gentle pastel aesthetic.">
+    <title>Type It</title>
+    <!-- Created as a child-friendly typing tool with word recognition and emoji visuals. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: "Fredoka", system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #f5e6f8 0%, #e8f5f0 50%, #fff4e6 100%);
+            overflow: hidden;
+        }
+
+        #app {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .hud {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(8px);
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            color: #5a4a6f;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            z-index: 10;
+        }
+
+        .hud strong {
+            display: block;
+            font-size: 16px;
+            color: #3d2f4f;
+            margin-bottom: 4px;
+        }
+
+        #display-container {
+            text-align: center;
+            position: relative;
+            height: 400px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 80px;
+        }
+
+        #emoji-display {
+            font-size: clamp(80px, 20vw, 180px);
+            height: 1.2em;
+            min-height: 80px;
+            opacity: 0;
+            transition: opacity 0.4s ease-out;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        #emoji-display.show {
+            opacity: 1;
+        }
+
+        #emoji-display.fade-out {
+            animation: fadeOut 0.8s ease-out forwards;
+        }
+
+        #text-display {
+            font-size: clamp(60px, 15vw, 120px);
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            min-height: 1.2em;
+            opacity: 1;
+            transition: opacity 0.3s ease-out;
+            pointer-events: none;
+            user-select: none;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+        }
+
+        #text-display.fade-out {
+            animation: fadeOut 0.8s ease-out forwards;
+        }
+
+        @keyframes fadeOut {
+            from {
+                opacity: 1;
+            }
+            to {
+                opacity: 0;
+            }
+        }
+
+        .letter {
+            display: inline-block;
+            animation: letterPop 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        @keyframes letterPop {
+            0% {
+                transform: scale(0.5);
+                opacity: 0;
+            }
+            50% {
+                transform: scale(1.1);
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .footer {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            background: rgba(255, 255, 255, 0.5);
+            color: #5a4a6f;
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 12px;
+            text-decoration: none;
+            backdrop-filter: blur(4px);
+            z-index: 10;
+        }
+
+        .footer:hover {
+            background: rgba(255, 255, 255, 0.7);
+        }
+
+        @media (max-width: 600px) {
+            .hud {
+                font-size: 12px;
+                padding: 10px 12px;
+            }
+
+            .hud strong {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div id="app" aria-live="polite" aria-label="Typing playground for children">
+    <div class="hud">
+        <strong>Type It</strong>
+        Type words to see emoji pictures!
+    </div>
+    <div id="display-container">
+        <div id="emoji-display" aria-live="polite"></div>
+        <div id="text-display" aria-live="assertive"></div>
+    </div>
+    <a class="footer" href="https://github.com/ZainRizvi/HtmlTools/blob/main/type-it.html" target="_blank" rel="noopener">
+        View source
+    </a>
+</div>
+
+<!-- MODULE: Word Dictionary
+     Maps common child-friendly words to emoji representations.
+     Includes utility functions for checking if text is a valid word or prefix.
+-->
+<script>
+    const WORD_DICTIONARY = {
+        // Animals
+        cat: '🐱',
+        dog: '🐶',
+        bird: '🐦',
+        fish: '🐠',
+        bear: '🐻',
+        lion: '🦁',
+        pig: '🐷',
+        cow: '🐄',
+        duck: '🦆',
+        frog: '🐸',
+        bee: '🐝',
+        bug: '🐛',
+        bunny: '🐰',
+        monkey: '🐵',
+        tiger: '🐯',
+        zebra: '🦓',
+        giraffe: '🦒',
+        elephant: '🐘',
+        whale: '🐋',
+        penguin: '🐧',
+
+        // Objects
+        ball: '⚽',
+        car: '🚗',
+        sun: '☀️',
+        moon: '🌙',
+        star: '⭐',
+        tree: '🌳',
+        house: '🏠',
+        book: '📖',
+        cup: '☕',
+        hat: '🎩',
+        shoe: '👟',
+        heart: '❤️',
+        clock: '🕐',
+        phone: '📱',
+        computer: '💻',
+        flower: '🌸',
+        rock: '🪨',
+        cloud: '☁️',
+        boat: '⛵',
+        plane: '✈️',
+
+        // Food
+        apple: '🍎',
+        banana: '🍌',
+        cake: '🎂',
+        egg: '🥚',
+        pizza: '🍕',
+        cookie: '🍪',
+        bread: '🍞',
+        cheese: '🧀',
+        carrot: '🥕',
+        corn: '🌽',
+        watermelon: '🍉',
+        strawberry: '🍓',
+        grape: '🍇',
+        orange: '🍊',
+        lemon: '🍋',
+        milk: '🥛',
+        juice: '🧃',
+        candy: '🍬',
+        ice: '🧊',
+        peas: '🫛',
+
+        // People
+        mom: '👩',
+        dad: '👨',
+        baby: '👶',
+        boy: '👦',
+        girl: '👧',
+        friend: '👫',
+        king: '👑',
+        queen: '👑',
+        person: '👤',
+        smile: '😊',
+        laugh: '😂',
+        cry: '😢',
+        sleep: '😴',
+
+        // Nature
+        rain: '🌧️',
+        snow: '❄️',
+        leaf: '🍃',
+        rainbow: '🌈',
+        sea: '🌊',
+        sand: '🏖️',
+        mountain: '⛰️',
+        grass: '🌱',
+        cactus: '🌵',
+        mushroom: '🍄',
+
+        // Colors (simple)
+        red: '🔴',
+        blue: '🔵',
+        yellow: '🟡',
+        green: '🟢',
+        purple: '🟣',
+        pink: '💗',
+        orange: '🟠',
+        black: '⚫',
+        white: '⚪',
+
+        // Actions/Verbs
+        run: '🏃',
+        jump: '🦘',
+        sleep: '😴',
+        eat: '🍽️',
+        swim: '🏊',
+        fly: '🦅',
+        dance: '💃',
+        sing: '🎵',
+        play: '🎮',
+        read: '📚',
+        draw: '🎨',
+        laugh: '😂',
+        cry: '😭',
+        hug: '🤗',
+        wave: '👋',
+
+        // Simple Adjectives
+        big: '📏',
+        small: '🤏',
+        hot: '🔥',
+        cold: '🧊',
+        wet: '💧',
+        dry: '🏜️',
+        happy: '😊',
+        sad: '😢',
+        angry: '😠',
+        tired: '😴'
+    };
+
+    /**
+     * Check if a word exists in the dictionary
+     * @param {string} word - The word to check (case-insensitive)
+     * @returns {boolean} True if word is in dictionary
+     */
+    function isValidWord(word) {
+        return word.toLowerCase() in WORD_DICTIONARY;
+    }
+
+    /**
+     * Get emoji for a word
+     * @param {string} word - The word to look up (case-insensitive)
+     * @returns {string|null} The emoji or null if word not found
+     */
+    function getEmoji(word) {
+        const lower = word.toLowerCase();
+        return WORD_DICTIONARY[lower] || null;
+    }
+
+    /**
+     * Check if text could be a valid prefix of any dictionary word
+     * @param {string} text - The text to check (case-insensitive)
+     * @returns {boolean} True if text is a prefix of at least one word
+     */
+    function isValidPrefix(text) {
+        if (!text) return true; // empty is valid
+        const lower = text.toLowerCase();
+        return Object.keys(WORD_DICTIONARY).some(word => word.startsWith(lower));
+    }
+
+    window.wordDict = { isValidWord, getEmoji, isValidPrefix };
+</script>
+
+<!-- MODULE: Text Display with Animation
+     Manages rendering and animating typed text with per-letter styling.
+     Uses safe DOM methods to avoid innerHTML vulnerabilities.
+-->
+<script>
+    function renderText(text) {
+        const display = document.getElementById('text-display');
+        const colors = ['#b8348a', '#1a8b6f', '#d1314d', '#d67d3c', '#2563b8'];
+
+        if (!text) {
+            display.textContent = '';
+            return;
+        }
+
+        // Clear existing content by removing all children
+        while (display.firstChild) {
+            display.removeChild(display.firstChild);
+        }
+
+        // Add each letter as a span for independent animation
+        text.split('').forEach((char, index) => {
+            const span = document.createElement('span');
+            span.className = 'letter';
+            span.textContent = char.toUpperCase();
+            span.style.color = colors[index % colors.length];
+            span.style.animationDelay = `${index * 0.05}s`;
+            display.appendChild(span);
+        });
+    }
+
+    window.textDisplay = { renderText };
+</script>
+
+<!-- MODULE: Emoji Display Handler
+     Shows and manages emoji animations when words are recognized.
+-->
+<script>
+    function showEmoji(emoji) {
+        const emojiDisplay = document.getElementById('emoji-display');
+        emojiDisplay.textContent = emoji;
+        emojiDisplay.classList.remove('fade-out');
+        emojiDisplay.classList.add('show');
+    }
+
+    function hideEmoji() {
+        const emojiDisplay = document.getElementById('emoji-display');
+        emojiDisplay.classList.remove('show');
+        emojiDisplay.classList.add('fade-out');
+    }
+
+    window.emojiDisplay = { showEmoji, hideEmoji };
+</script>
+
+<!-- MODULE: Smart Timer with Prefix Detection
+     Manages inactivity timer that adjusts duration based on whether text is a valid prefix.
+     5 seconds for valid prefixes, 1 second for dead ends.
+-->
+<script>
+    (function initSmartTimer() {
+        let timeoutId = null;
+        let currentText = '';
+
+        /**
+         * Calculate timer duration based on whether text could become a valid word
+         * @param {string} text - The currently typed text
+         * @returns {number} Duration in milliseconds (5000 or 1000)
+         */
+        function getDuration(text) {
+            return window.wordDict.isValidPrefix(text) ? 5000 : 1000;
+        }
+
+        /**
+         * Reset the inactivity timer
+         * @param {string} text - The currently typed text
+         * @param {function} onExpire - Callback when timer expires
+         */
+        function resetTimer(text, onExpire) {
+            currentText = text;
+            clearTimeout(timeoutId);
+
+            const duration = getDuration(text);
+            timeoutId = setTimeout(onExpire, duration);
+        }
+
+        /**
+         * Cancel the timer (called when user starts typing again)
+         */
+        function cancelTimer() {
+            clearTimeout(timeoutId);
+        }
+
+        window.smartTimer = { resetTimer, cancelTimer, getDuration };
+    })();
+</script>
+
+<!-- MODULE: Input Handler and State Management
+     Captures keyboard input, manages typed text state, and coordinates display updates.
+-->
+<script>
+    (function initInputHandler() {
+        let typedText = '';
+        let isFadingOut = false;
+
+        function clearDisplay() {
+            const textDisplay = document.getElementById('text-display');
+            const emojiDisplay = document.getElementById('emoji-display');
+
+            textDisplay.classList.add('fade-out');
+            window.emojiDisplay.hideEmoji();
+
+            setTimeout(() => {
+                typedText = '';
+                textDisplay.classList.remove('fade-out');
+                textDisplay.textContent = '';
+                emojiDisplay.classList.remove('fade-out', 'show');
+                emojiDisplay.textContent = '';
+                isFadingOut = false;
+            }, 800);
+        }
+
+        function handleTimerExpire() {
+            isFadingOut = true;
+            clearDisplay();
+        }
+
+        function handleKeydown(event) {
+            // Cancel fade-out if user starts typing during it
+            if (isFadingOut) {
+                isFadingOut = false;
+                document.getElementById('text-display').classList.remove('fade-out');
+                window.emojiDisplay.hideEmoji();
+            }
+
+            const key = event.key.toLowerCase();
+
+            // Handle backspace
+            if (key === 'backspace') {
+                event.preventDefault();
+                if (typedText.length > 0) {
+                    typedText = typedText.slice(0, -1);
+                    window.textDisplay.renderText(typedText);
+
+                    // Check if we still have a valid match
+                    const emoji = window.wordDict.getEmoji(typedText);
+                    if (emoji && typedText.length > 0) {
+                        window.emojiDisplay.showEmoji(emoji);
+                    } else {
+                        window.emojiDisplay.hideEmoji();
+                    }
+
+                    window.smartTimer.resetTimer(typedText, handleTimerExpire);
+                }
+                return;
+            }
+
+            // Only accept letters
+            if (!/^[a-z]$/.test(key)) {
+                return;
+            }
+
+            event.preventDefault();
+            typedText += key;
+            window.textDisplay.renderText(typedText);
+
+            // Check for word match
+            const emoji = window.wordDict.getEmoji(typedText);
+            if (emoji) {
+                window.emojiDisplay.showEmoji(emoji);
+            } else {
+                window.emojiDisplay.hideEmoji();
+            }
+
+            window.smartTimer.resetTimer(typedText, handleTimerExpire);
+        }
+
+        document.addEventListener('keydown', handleKeydown);
+        document.getElementById('app').focus();
+    })();
+</script>
+
+</body>
+</html>
