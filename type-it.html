@@ -411,10 +411,10 @@
         /**
          * Calculate timer duration based on whether text could become a valid word
          * @param {string} text - The currently typed text
-         * @returns {number} Duration in milliseconds (5000 or 1000)
+         * @returns {number} Duration in milliseconds (20000 for valid, 1000 for invalid)
          */
         function getDuration(text) {
-            return window.wordDict.isValidPrefix(text) ? 5000 : 1000;
+            return window.wordDict.isValidPrefix(text) ? 20000 : 1000;
         }
 
         /**
@@ -427,7 +427,20 @@
             clearTimeout(timeoutId);
 
             const duration = getDuration(text);
-            timeoutId = setTimeout(onExpire, duration);
+            const isInvalid = !window.wordDict.isValidPrefix(text);
+
+            // Darken background for invalid prefix
+            if (isInvalid && text.length > 0) {
+                document.body.style.background = '#1a1a1a';
+            } else {
+                document.body.style.background = 'linear-gradient(135deg, #ffe4f0 0%, #fff0d9 50%, #e0f7ff 100%)';
+            }
+
+            timeoutId = setTimeout(() => {
+                // Reset background before calling onExpire
+                document.body.style.background = 'linear-gradient(135deg, #ffe4f0 0%, #fff0d9 50%, #e0f7ff 100%)';
+                onExpire();
+            }, duration);
         }
 
         /**
@@ -437,7 +450,14 @@
             clearTimeout(timeoutId);
         }
 
-        window.smartTimer = { resetTimer, cancelTimer, getDuration };
+        /**
+         * Reset background to normal
+         */
+        function resetBackground() {
+            document.body.style.background = 'linear-gradient(135deg, #ffe4f0 0%, #fff0d9 50%, #e0f7ff 100%)';
+        }
+
+        window.smartTimer = { resetTimer, cancelTimer, getDuration, resetBackground };
     })();
 </script>
 
@@ -478,6 +498,9 @@
                 document.getElementById('text-display').classList.remove('fade-out');
                 window.emojiDisplay.hideEmoji();
             }
+
+            // Reset background when user starts typing again
+            window.smartTimer.resetBackground();
 
             const key = event.key.toLowerCase();
 
