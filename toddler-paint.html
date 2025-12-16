@@ -76,10 +76,23 @@
         }
 
         .button-group {
-            display: flex;
+            display: grid;
             gap: 4px;
-            flex-wrap: wrap;
-            justify-content: flex-start;
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .button-group.control-group {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+
+        @media (orientation: portrait) {
+            .button-group {
+                grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+            }
+
+            .button-group.control-group {
+                grid-template-columns: repeat(3, 1fr);
+            }
         }
 
         .button-divider {
@@ -603,12 +616,10 @@
                 const panel = document.getElementById('control-panel');
                 const buttonSize = getButtonSize();
 
-                // Create color buttons
+                // Create color buttons (2-column grid layout)
                 const colorGroup = document.createElement('div');
                 colorGroup.className = 'button-group';
-                colorGroup.style.display = 'flex';
                 colorGroup.style.gap = '4px';
-                colorGroup.style.flexWrap = 'wrap';
 
                 const colors = BrushEngine.getColors();
                 colors.forEach(color => {
@@ -632,10 +643,8 @@
 
                 // Create control buttons
                 const controlGroup = document.createElement('div');
-                controlGroup.className = 'button-group';
-                controlGroup.style.display = 'flex';
+                controlGroup.className = 'button-group control-group';
                 controlGroup.style.gap = '4px';
-                controlGroup.style.flexWrap = 'wrap';
 
                 // Bigger button
                 const biggerBtn = createControlButton('+', '➕', () => {
