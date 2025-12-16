@@ -43,36 +43,12 @@
             flex-direction: column;
             top: 0;
             left: 0;
-            max-width: 150px;
-            max-height: 100vh;
+            width: 190px; /* updated dynamically by JS based on button size */
+            max-width: 45vw;
+            height: 100vh;
             overflow-y: auto;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             z-index: 50;
-        }
-
-        /* Landscape: vertical panel on side */
-        @media (orientation: landscape) {
-            #control-panel {
-                height: 100vh;
-                width: 140px;
-                flex-direction: column;
-                top: 0;
-                left: 0;
-            }
-        }
-
-        /* Portrait: horizontal panel on top */
-        @media (orientation: portrait) {
-            #control-panel {
-                width: 100vw;
-                height: auto;
-                flex-direction: row;
-                top: 0;
-                left: 0;
-                max-width: 100vw;
-                overflow-x: auto;
-                overflow-y: hidden;
-            }
         }
 
         .button-group {
@@ -82,29 +58,13 @@
         }
 
         .button-group.control-group {
-            grid-template-columns: 1fr 1fr 1fr;
-        }
-
-        @media (orientation: portrait) {
-            .button-group {
-                grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
-            }
-
-            .button-group.control-group {
-                grid-template-columns: repeat(3, 1fr);
-            }
+            grid-template-columns: 1fr 1fr;
         }
 
         .button-divider {
-            width: 2px;
+            width: 100%;
+            height: 2px;
             background: #ddd;
-        }
-
-        @media (orientation: portrait) {
-            .button-divider {
-                width: auto;
-                height: 2px;
-            }
         }
 
         #fullscreen-btn {
@@ -181,48 +141,28 @@
                 width: 0,
                 height: 0,
                 panelHeight: 0,
-                panelWidth: 0,
-                isPortrait: window.innerHeight > window.innerWidth
+                panelWidth: 0
             };
 
             function getControlPanelDimensions() {
                 const panel = document.getElementById('control-panel');
                 if (!panel) return { width: 0, height: 0 };
-
-                if (canvasState.isPortrait) {
-                    // Portrait: panel takes full width, height is for buttons + spacing
-                    const shortDim = Math.min(window.innerWidth, window.innerHeight);
-                    const buttonSize = Math.max(60, Math.round(shortDim * 0.10));
-                    return {
-                        width: window.innerWidth,
-                        height: buttonSize + 12 + 4 // button height + padding + divider
-                    };
-                } else {
-                    // Landscape: panel is fixed width on the side
-                    return {
-                        width: 140,
-                        height: window.innerHeight
-                    };
-                }
+                const rect = panel.getBoundingClientRect();
+                const width = Math.max(120, Math.round(rect.width || panel.offsetWidth || 190));
+                return { width, height: window.innerHeight };
             }
 
             function updateCanvasSize() {
                 const panelDims = getControlPanelDimensions();
                 canvasState.panelWidth = panelDims.width;
                 canvasState.panelHeight = panelDims.height;
-                canvasState.isPortrait = window.innerHeight > window.innerWidth;
 
                 // Save current canvas content
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
                 // Calculate new size
-                if (canvasState.isPortrait) {
-                    canvasState.width = window.innerWidth;
-                    canvasState.height = window.innerHeight - panelDims.height;
-                } else {
-                    canvasState.width = window.innerWidth - panelDims.width;
-                    canvasState.height = window.innerHeight;
-                }
+                canvasState.width = Math.max(1, window.innerWidth - panelDims.width);
+                canvasState.height = Math.max(1, window.innerHeight);
 
                 // Update canvas
                 canvas.width = canvasState.width;
@@ -237,13 +177,8 @@
             }
 
             function updateCanvasPosition() {
-                if (canvasState.isPortrait) {
-                    canvas.style.top = canvasState.panelHeight + 'px';
-                    canvas.style.left = '0px';
-                } else {
-                    canvas.style.top = '0px';
-                    canvas.style.left = canvasState.panelWidth + 'px';
-                }
+                canvas.style.top = '0px';
+                canvas.style.left = canvasState.panelWidth + 'px';
             }
 
             function handleResize() {
@@ -508,35 +443,29 @@
     </script>
 
     <!-- MODULE: Control Panel UI
-         Render and manage color buttons, size controls, and clear button.
+         Render and manage color buttons and size controls.
     -->
     <script>
         /* MODULE: Control Panel UI
-           Render and manage color buttons, size controls, and clear button.
+           Render and manage color buttons and size controls.
         */
 
         const ControlPanel = (() => {
             let currentSelectedColor = null;
 
             function getButtonSize() {
-                const isPortrait = window.innerHeight > window.innerWidth;
                 const shortDimension = Math.min(window.innerWidth, window.innerHeight);
-
-                if (isPortrait) {
-                    // Portrait: buttons should be smaller to fit more on screen
-                    return Math.max(60, Math.round(shortDimension * 0.10));
-                } else {
-                    // Landscape: fixed size to keep panel narrow
-                    return 85;
-                }
+                // Always a left sidebar: size based on short dimension, clamped.
+                return Math.max(60, Math.min(92, Math.round(shortDimension * 0.16)));
             }
 
             function updatePanelLayout() {
                 const panel = document.getElementById('control-panel');
-                const isPortrait = window.innerHeight > window.innerWidth;
                 const buttonSize = getButtonSize();
 
-                panel.style.flexDirection = isPortrait ? 'row' : 'column';
+                // Keep sidebar sized to exactly fit a 2-column palette.
+                // width = padding*2 + (2*buttonSize) + gap(4)
+                panel.style.width = (6 * 2 + buttonSize * 2 + 4) + 'px';
 
                 // Update button sizes
                 const buttons = panel.querySelectorAll('button');
@@ -615,10 +544,11 @@
             function init() {
                 const panel = document.getElementById('control-panel');
                 const buttonSize = getButtonSize();
+                panel.style.width = (6 * 2 + buttonSize * 2 + 4) + 'px';
 
                 // Create color buttons (2-column grid layout)
                 const colorGroup = document.createElement('div');
-                colorGroup.className = 'button-group';
+                colorGroup.className = 'button-group color-group';
                 colorGroup.style.gap = '4px';
 
                 const colors = BrushEngine.getColors();
@@ -639,6 +569,7 @@
                 divider.style.backgroundColor = '#ddd';
                 divider.style.minHeight = '2px';
                 divider.style.minWidth = '2px';
+                divider.style.width = '100%';
                 panel.appendChild(divider);
 
                 // Create control buttons
@@ -670,18 +601,9 @@
                 smallerBtn.style.minHeight = buttonSize + 'px';
                 controlGroup.appendChild(smallerBtn);
 
-                // Clear button
-                const clearBtn = createControlButton('✕', '🗑️', () => {
-                    CanvasManager.clearCanvas();
-                });
-                clearBtn.style.backgroundColor = '#ef4444';
-                clearBtn.style.width = buttonSize + 'px';
-                clearBtn.style.height = buttonSize + 'px';
-                clearBtn.style.minWidth = buttonSize + 'px';
-                clearBtn.style.minHeight = buttonSize + 'px';
-                controlGroup.appendChild(clearBtn);
-
                 panel.appendChild(controlGroup);
+                // Ensure canvas reflects the final sidebar width
+                CanvasManager.updateCanvasSize();
 
                 // Set initial selection to a random color
                 const randomColor = BrushEngine.getRandomColor();
