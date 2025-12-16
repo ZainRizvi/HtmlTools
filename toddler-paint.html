@@ -38,16 +38,23 @@
             position: fixed;
             display: flex;
             background: white;
-            gap: 8px;
-            padding: 8px;
+            gap: 4px;
+            padding: 6px;
             flex-direction: column;
+            top: 0;
+            left: 0;
+            max-width: 150px;
+            max-height: 100vh;
+            overflow-y: auto;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 50;
         }
 
         /* Landscape: vertical panel on side */
         @media (orientation: landscape) {
             #control-panel {
                 height: 100vh;
-                width: auto;
+                width: 140px;
                 flex-direction: column;
                 top: 0;
                 left: 0;
@@ -62,6 +69,9 @@
                 flex-direction: row;
                 top: 0;
                 left: 0;
+                max-width: 100vw;
+                overflow-x: auto;
+                overflow-y: hidden;
             }
         }
 
@@ -69,6 +79,7 @@
             display: flex;
             gap: 4px;
             flex-wrap: wrap;
+            justify-content: flex-start;
         }
 
         .button-divider {
@@ -165,23 +176,18 @@
                 const panel = document.getElementById('control-panel');
                 if (!panel) return { width: 0, height: 0 };
 
-                // Get button size based on responsive sizing
-                const buttonSize = Math.max(60, Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.15));
-                const gap = 8;
-                const padding = 8;
-
-                // In portrait: panel is 6 buttons wide (rough estimate) or more
-                // In landscape: panel is as wide as needed
                 if (canvasState.isPortrait) {
-                    // Approximate height needed for horizontal button row
+                    // Portrait: panel takes full width, height is for buttons + spacing
+                    const shortDim = Math.min(window.innerWidth, window.innerHeight);
+                    const buttonSize = Math.max(60, Math.round(shortDim * 0.10));
                     return {
                         width: window.innerWidth,
-                        height: buttonSize + gap + padding * 2 + 2 // +2 for divider
+                        height: buttonSize + 12 + 4 // button height + padding + divider
                     };
                 } else {
-                    // Approximate width needed for vertical button column
+                    // Landscape: panel is fixed width on the side
                     return {
-                        width: buttonSize + gap + padding * 2,
+                        width: 140,
                         height: window.innerHeight
                     };
                 }
@@ -500,8 +506,16 @@
             let currentSelectedColor = null;
 
             function getButtonSize() {
+                const isPortrait = window.innerHeight > window.innerWidth;
                 const shortDimension = Math.min(window.innerWidth, window.innerHeight);
-                return Math.max(60, Math.round(shortDimension * 0.15));
+
+                if (isPortrait) {
+                    // Portrait: buttons should be smaller to fit more on screen
+                    return Math.max(60, Math.round(shortDimension * 0.10));
+                } else {
+                    // Landscape: fixed size to keep panel narrow
+                    return 85;
+                }
             }
 
             function updatePanelLayout() {
