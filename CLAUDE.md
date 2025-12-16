@@ -24,6 +24,51 @@ A **Tool** is defined as any HTML file in the root directory of the repository t
   - `install-pre-commit-hook.js` — Installs a git pre-commit hook to auto-update the tools list
 - **`lib/`** — Optional shared JS used by multiple tools (deliberate, small, stable)
 - **`assets/`** — Only if absolutely necessary (images, sample files, etc.)
+- **`.beads/`** — Task tracking database (managed by bd CLI)
+
+## Task tracking with bd
+
+This repository uses `bd` (beads) for dependency-aware task tracking. **NEVER use TodoWrite** - all task management must go through bd.
+
+### Core workflow
+
+- **Finding work**: `bd ready` shows issues with no blockers
+- **Creating tasks**: `bd create --title="..." --type=task|bug|feature --priority=2`
+  - Priority: 0-4 (0=critical, 2=medium, 4=backlog)
+  - Use parallel subagents when creating multiple tasks
+- **Claiming work**: `bd update <id> --status=in_progress`
+- **Completing work**: `bd close <id1> <id2> ...` (close multiple at once)
+- **Dependencies**: `bd dep add <issue> <depends-on>` (issue depends on depends-on)
+
+### Session close checklist
+
+**CRITICAL**: Before saying "done" or "complete", run this checklist:
+
+```bash
+git status              # check changes
+git add <files>         # stage code
+bd sync                 # commit beads changes
+git commit -m "..."     # commit code
+bd sync                 # commit any new beads changes
+git push                # push to remote
+```
+
+Work is not done until pushed.
+
+### Common commands
+
+- `bd list --status=open` - All open issues
+- `bd show <id>` - Detailed issue view
+- `bd blocked` - Show blocked issues
+- `bd stats` - Project health
+- `bd sync` - Sync with remote (run at session end)
+
+### Integration notes
+
+- Git hooks are installed and auto-sync bd changes
+- Sync branch configured: `beads-sync`
+- Never manually edit `.beads/*.jsonl` files
+- Use `bd doctor` to check for issues
 
 ## Non-negotiables
 
