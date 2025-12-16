@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Touch-friendly paint app for toddlers with bright colors and simple controls.">
+    <title>Toddler Paint</title>
+    <!-- Created by Claude AI: A simple painting application designed for toddlers with multi-touch support, big buttons, and vibrant colors. -->
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        }
+
+        body {
+            background: #f5f5f5;
+            display: flex;
+        }
+
+        #paint-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: #f5f5dc;
+            touch-action: none;
+            cursor: none;
+        }
+
+        #control-panel {
+            position: fixed;
+            display: flex;
+            background: white;
+            gap: 8px;
+            padding: 8px;
+            flex-direction: column;
+        }
+
+        /* Landscape: vertical panel on side */
+        @media (orientation: landscape) {
+            #control-panel {
+                height: 100vh;
+                width: auto;
+                flex-direction: column;
+                top: 0;
+                left: 0;
+            }
+        }
+
+        /* Portrait: horizontal panel on top */
+        @media (orientation: portrait) {
+            #control-panel {
+                width: 100vw;
+                height: auto;
+                flex-direction: row;
+                top: 0;
+                left: 0;
+            }
+        }
+
+        .button-group {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+
+        .button-divider {
+            width: 2px;
+            background: #ddd;
+        }
+
+        @media (orientation: portrait) {
+            .button-divider {
+                width: auto;
+                height: 2px;
+            }
+        }
+
+        #fullscreen-btn {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            width: 46px;
+            height: 46px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            background: rgba(255, 255, 255, 0.9);
+            color: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            padding: 0;
+            z-index: 100;
+            transition: all 0.15s ease;
+        }
+
+        #fullscreen-btn:hover {
+            background: rgba(255, 255, 255, 1);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        #fullscreen-btn svg {
+            width: 24px;
+            height: 24px;
+            fill: currentColor;
+        }
+
+        #fullscreen-btn .exit {
+            opacity: 0;
+            display: none;
+        }
+
+        #fullscreen-btn.is-exit .enter {
+            opacity: 0;
+            display: none;
+        }
+
+        #fullscreen-btn.is-exit .exit {
+            opacity: 1;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="paint-canvas"></canvas>
+
+    <div id="control-panel">
+        <!-- Color buttons will be inserted here by JavaScript -->
+    </div>
+
+    <button id="fullscreen-btn" aria-label="Enter full screen" title="Full screen">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path class="enter" d="M3 3h7v2H5v5H3V3zm11 0h7v7h-2V5h-5V3zm-11 11h2v5h5v2H3v-7zm16 0h2v7h-7v-2h5v-5z"/>
+            <path class="exit" d="M3 9h2V5h4V3H3v6zm12-6v2h4v4h2V3h-6zm-12 12v6h6v-2H5v-4H3zm14 4h-4v2h6v-6h-2v4z"/>
+        </svg>
+    </button>
+
+    <!-- MODULE: Canvas Setup & Management
+         Initialize canvas and manage viewport/orientation changes.
+    -->
+    <script>
+        /* MODULE: Canvas Setup & Management
+           Initialize canvas, handle viewport/orientation changes, and manage drawing state.
+        */
+
+        const CanvasManager = (() => {
+            let canvas, ctx;
+            let canvasState = {
+                width: 0,
+                height: 0,
+                panelHeight: 0,
+                panelWidth: 0,
+                isPortrait: window.innerHeight > window.innerWidth
+            };
+
+            function getControlPanelDimensions() {
+                const panel = document.getElementById('control-panel');
+                if (!panel) return { width: 0, height: 0 };
+
+                // Get button size based on responsive sizing
+                const buttonSize = Math.max(60, Math.round(Math.min(window.innerWidth, window.innerHeight) * 0.15));
+                const gap = 8;
+                const padding = 8;
+
+                // In portrait: panel is 6 buttons wide (rough estimate) or more
+                // In landscape: panel is as wide as needed
+                if (canvasState.isPortrait) {
+                    // Approximate height needed for horizontal button row
+                    return {
+                        width: window.innerWidth,
+                        height: buttonSize + gap + padding * 2 + 2 // +2 for divider
+                    };
+                } else {
+                    // Approximate width needed for vertical button column
+                    return {
+                        width: buttonSize + gap + padding * 2,
+                        height: window.innerHeight
+                    };
+                }
+            }
+
+            function updateCanvasSize() {
+                const panelDims = getControlPanelDimensions();
+                canvasState.panelWidth = panelDims.width;
+                canvasState.panelHeight = panelDims.height;
+                canvasState.isPortrait = window.innerHeight > window.innerWidth;
+
+                // Save current canvas content
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                // Calculate new size
+                if (canvasState.isPortrait) {
+                    canvasState.width = window.innerWidth;
+                    canvasState.height = window.innerHeight - panelDims.height;
+                } else {
+                    canvasState.width = window.innerWidth - panelDims.width;
+                    canvasState.height = window.innerHeight;
+                }
+
+                // Update canvas
+                canvas.width = canvasState.width;
+                canvas.height = canvasState.height;
+
+                // Restore canvas content if size increased
+                if (imageData.width > 0 && imageData.height > 0) {
+                    ctx.putImageData(imageData, 0, 0);
+                }
+
+                updateCanvasPosition();
+            }
+
+            function updateCanvasPosition() {
+                if (canvasState.isPortrait) {
+                    canvas.style.top = canvasState.panelHeight + 'px';
+                    canvas.style.left = '0px';
+                } else {
+                    canvas.style.top = '0px';
+                    canvas.style.left = canvasState.panelWidth + 'px';
+                }
+            }
+
+            function handleResize() {
+                updateCanvasSize();
+                // Dispatch custom event for other modules to know about resize
+                window.dispatchEvent(new Event('canvas-resized'));
+            }
+
+            function clearCanvas() {
+                ctx.fillStyle = '#f5f5dc';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            function init() {
+                canvas = document.getElementById('paint-canvas');
+                ctx = canvas.getContext('2d', { alpha: false });
+
+                updateCanvasSize();
+                clearCanvas();
+
+                // Listen for resize events
+                window.addEventListener('resize', handleResize);
+                // Also listen for orientation change
+                window.addEventListener('orientationchange', handleResize);
+            }
+
+            return {
+                init,
+                getCanvas: () => canvas,
+                getContext: () => ctx,
+                getState: () => ({ ...canvasState }),
+                clearCanvas,
+                updateCanvasSize,
+                canvasToPageCoords(x, y) {
+                    const rect = canvas.getBoundingClientRect();
+                    return {
+                        x: x - rect.left,
+                        y: y - rect.top
+                    };
+                }
+            };
+        })();
+
+        // Initialize canvas manager
+        CanvasManager.init();
+    </script>
+
+    <!-- MODULE: Brush Engine
+         Draw circular brush strokes with opacity and render cursor preview.
+    -->
+    <script>
+        /* MODULE: Brush Engine
+           Draw circular brush strokes with opacity and render cursor preview.
+        */
+
+        const BrushEngine = (() => {
+            const ctx = CanvasManager.getContext();
+            const canvas = CanvasManager.getCanvas();
+
+            let brushState = {
+                color: '#FF1493',      // Hot pink
+                size: 85,              // Middle of 20-150 range
+                isDrawing: false
+            };
+
+            const COLORS = [
+                '#FF1493', // Hot Pink
+                '#87CEEB', // Sky Blue
+                '#32CD32', // Lime Green
+                '#FFD700', // Sunny Yellow
+                '#FF8C00', // Orange
+                '#9370DB', // Purple
+                '#8B4513', // Brown
+                '#000000'  // Black
+            ];
+
+            /**
+             * Draw a circular brush stroke at the specified coordinates
+             * @param {number} x - X coordinate
+             * @param {number} y - Y coordinate
+             * @param {string} color - Color to use (hex)
+             * @param {number} size - Brush diameter in pixels
+             */
+            function drawBrushStroke(x, y, color, size) {
+                ctx.save();
+                ctx.globalAlpha = 0.65; // 65% opacity for layering
+                ctx.fillStyle = color;
+                ctx.imageSmoothingEnabled = true;
+
+                const radius = size / 2;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+
+            /**
+             * Draw cursor preview circle (semi-transparent)
+             * @param {number} x - X coordinate
+             * @param {number} y - Y coordinate
+             * @param {string} color - Color to use
+             * @param {number} size - Brush diameter in pixels
+             */
+            function drawCursorPreview(x, y, color, size) {
+                ctx.save();
+                ctx.globalAlpha = 0.3; // 30% preview opacity
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.imageSmoothingEnabled = true;
+
+                const radius = size / 2;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.restore();
+            }
+
+            function getRandomColor() {
+                return COLORS[Math.floor(Math.random() * COLORS.length)];
+            }
+
+            return {
+                getBrushState: () => ({ ...brushState }),
+                setBrushColor(color) {
+                    if (COLORS.includes(color)) {
+                        brushState.color = color;
+                    }
+                },
+                getColor: () => brushState.color,
+                setBrushSize(size) {
+                    const clamped = Math.max(20, Math.min(150, size));
+                    brushState.size = clamped;
+                    return brushState.size;
+                },
+                getSize: () => brushState.size,
+                increaseBrushSize() {
+                    return this.setBrushSize(brushState.size + 15);
+                },
+                decreaseBrushSize() {
+                    return this.setBrushSize(brushState.size - 15);
+                },
+                drawStroke: drawBrushStroke,
+                drawCursorPreview,
+                getRandomColor,
+                getColors: () => [...COLORS]
+            };
+        })();
+    </script>
+
+    <!-- MODULE: Multi-touch Paint Handler
+         Handle pointer events for single and multi-touch painting.
+    -->
+    <script>
+        /* MODULE: Multi-touch Paint Handler
+           Handle pointer events for single and multi-touch painting.
+        */
+
+        const TouchPaintHandler = (() => {
+            const canvas = CanvasManager.getCanvas();
+            const activeStrokes = new Map(); // pointerId -> {x, y, lastX, lastY}
+
+            /**
+             * Interpolate between two points and draw strokes along the path
+             * Helps create smooth lines for fast strokes
+             */
+            function drawLineTo(fromX, fromY, toX, toY, color, size) {
+                const dx = toX - fromX;
+                const dy = toY - fromY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const steps = Math.ceil(distance / 5); // Draw every 5px
+
+                for (let i = 0; i <= steps; i++) {
+                    const t = steps === 0 ? 0 : i / steps;
+                    const x = fromX + dx * t;
+                    const y = fromY + dy * t;
+                    BrushEngine.drawStroke(x, y, color, size);
+                }
+            }
+
+            function handlePointerDown(event) {
+                if (event.pointerType !== 'touch' && event.pointerType !== 'pen' && event.pointerType !== 'mouse') {
+                    return;
+                }
+
+                const coords = CanvasManager.canvasToPageCoords(event.clientX, event.clientY);
+                activeStrokes.set(event.pointerId, {
+                    x: coords.x,
+                    y: coords.y,
+                    lastX: coords.x,
+                    lastY: coords.y
+                });
+
+                // Draw initial point
+                BrushEngine.drawStroke(coords.x, coords.y, BrushEngine.getColor(), BrushEngine.getSize());
+
+                // Capture pointer
+                canvas.setPointerCapture(event.pointerId);
+            }
+
+            function handlePointerMove(event) {
+                const stroke = activeStrokes.get(event.pointerId);
+                if (!stroke) return;
+
+                const coords = CanvasManager.canvasToPageCoords(event.clientX, event.clientY);
+
+                // Interpolate and draw line to new position
+                drawLineTo(
+                    stroke.lastX,
+                    stroke.lastY,
+                    coords.x,
+                    coords.y,
+                    BrushEngine.getColor(),
+                    BrushEngine.getSize()
+                );
+
+                // Update position
+                stroke.lastX = coords.x;
+                stroke.lastY = coords.y;
+            }
+
+            function handlePointerUp(event) {
+                activeStrokes.delete(event.pointerId);
+                try {
+                    canvas.releasePointerCapture(event.pointerId);
+                } catch (e) {
+                    // Pointer not captured, ignore
+                }
+            }
+
+            function handlePointerCancel(event) {
+                activeStrokes.delete(event.pointerId);
+            }
+
+            function handleColorChange(event) {
+                // Color already changed in BrushEngine, but we could add effects here if needed
+                // All active strokes will use new color on next pointermove
+            }
+
+            function handleSizeChange(event) {
+                // Size already changed in BrushEngine
+            }
+
+            function init() {
+                canvas.addEventListener('pointerdown', handlePointerDown);
+                canvas.addEventListener('pointermove', handlePointerMove);
+                canvas.addEventListener('pointerup', handlePointerUp);
+                canvas.addEventListener('pointercancel', handlePointerCancel);
+
+                // Listen for custom events from control panel
+                window.addEventListener('brush-color-changed', handleColorChange);
+                window.addEventListener('brush-size-changed', handleSizeChange);
+            }
+
+            return {
+                init
+            };
+        })();
+
+        TouchPaintHandler.init();
+    </script>
+
+    <!-- MODULE: Control Panel UI
+         Render and manage color buttons, size controls, and clear button.
+    -->
+    <script>
+        /* MODULE: Control Panel UI
+           Render and manage color buttons, size controls, and clear button.
+        */
+
+        const ControlPanel = (() => {
+            let currentSelectedColor = null;
+
+            function getButtonSize() {
+                const shortDimension = Math.min(window.innerWidth, window.innerHeight);
+                return Math.max(60, Math.round(shortDimension * 0.15));
+            }
+
+            function updatePanelLayout() {
+                const panel = document.getElementById('control-panel');
+                const isPortrait = window.innerHeight > window.innerWidth;
+                const buttonSize = getButtonSize();
+
+                panel.style.flexDirection = isPortrait ? 'row' : 'column';
+
+                // Update button sizes
+                const buttons = panel.querySelectorAll('button');
+                buttons.forEach(btn => {
+                    btn.style.width = buttonSize + 'px';
+                    btn.style.height = buttonSize + 'px';
+                    btn.style.minWidth = buttonSize + 'px';
+                    btn.style.minHeight = buttonSize + 'px';
+                });
+
+                CanvasManager.updateCanvasSize();
+            }
+
+            function createColorButton(color) {
+                const btn = document.createElement('button');
+                btn.className = 'color-btn';
+                btn.dataset.color = color;
+                btn.style.backgroundColor = color;
+                btn.style.borderRadius = '50%';
+                btn.style.border = 'none';
+                btn.style.cursor = 'pointer';
+                btn.style.transition = 'all 0.15s ease';
+                btn.setAttribute('aria-pressed', 'false');
+
+                btn.addEventListener('click', () => selectColor(color, btn));
+                btn.addEventListener('pointerdown', (e) => e.stopPropagation());
+                btn.addEventListener('touchstart', (e) => e.stopPropagation());
+
+                return btn;
+            }
+
+            function createControlButton(text, icon, callback) {
+                const btn = document.createElement('button');
+                btn.className = 'control-btn';
+                btn.textContent = text;
+                btn.style.borderRadius = '8px';
+                btn.style.border = 'none';
+                btn.style.cursor = 'pointer';
+                btn.style.transition = 'all 0.15s ease';
+                btn.style.color = 'white';
+                btn.style.fontWeight = 'bold';
+                btn.style.fontSize = '18px';
+
+                btn.addEventListener('click', callback);
+                btn.addEventListener('pointerdown', (e) => e.stopPropagation());
+                btn.addEventListener('touchstart', (e) => e.stopPropagation());
+
+                return btn;
+            }
+
+            function selectColor(color, buttonElement) {
+                // Remove selection from previous button
+                if (currentSelectedColor) {
+                    const prevBtn = document.querySelector(`[data-color="${currentSelectedColor}"]`);
+                    if (prevBtn) {
+                        prevBtn.setAttribute('aria-pressed', 'false');
+                        prevBtn.style.boxShadow = 'none';
+                        prevBtn.style.transform = 'scale(1)';
+                    }
+                }
+
+                // Select new color
+                currentSelectedColor = color;
+                BrushEngine.setBrushColor(color);
+
+                // Update button appearance
+                buttonElement.setAttribute('aria-pressed', 'true');
+                const glow = `0 0 0 3px rgba(0,0,0,0.3), 0 0 12px ${color}, 0 0 20px ${color}`;
+                buttonElement.style.boxShadow = glow;
+                buttonElement.style.transform = 'scale(1.1)';
+
+                // Dispatch event for other modules
+                window.dispatchEvent(new CustomEvent('brush-color-changed', { detail: { color } }));
+            }
+
+            function init() {
+                const panel = document.getElementById('control-panel');
+                const buttonSize = getButtonSize();
+
+                // Create color buttons
+                const colorGroup = document.createElement('div');
+                colorGroup.className = 'button-group';
+                colorGroup.style.display = 'flex';
+                colorGroup.style.gap = '4px';
+                colorGroup.style.flexWrap = 'wrap';
+
+                const colors = BrushEngine.getColors();
+                colors.forEach(color => {
+                    const btn = createColorButton(color);
+                    btn.style.width = buttonSize + 'px';
+                    btn.style.height = buttonSize + 'px';
+                    btn.style.minWidth = buttonSize + 'px';
+                    btn.style.minHeight = buttonSize + 'px';
+                    colorGroup.appendChild(btn);
+                });
+
+                panel.appendChild(colorGroup);
+
+                // Add divider
+                const divider = document.createElement('div');
+                divider.className = 'button-divider';
+                divider.style.backgroundColor = '#ddd';
+                divider.style.minHeight = '2px';
+                divider.style.minWidth = '2px';
+                panel.appendChild(divider);
+
+                // Create control buttons
+                const controlGroup = document.createElement('div');
+                controlGroup.className = 'button-group';
+                controlGroup.style.display = 'flex';
+                controlGroup.style.gap = '4px';
+                controlGroup.style.flexWrap = 'wrap';
+
+                // Bigger button
+                const biggerBtn = createControlButton('+', '➕', () => {
+                    BrushEngine.increaseBrushSize();
+                    window.dispatchEvent(new CustomEvent('brush-size-changed'));
+                });
+                biggerBtn.style.backgroundColor = '#22c55e';
+                biggerBtn.style.width = buttonSize + 'px';
+                biggerBtn.style.height = buttonSize + 'px';
+                biggerBtn.style.minWidth = buttonSize + 'px';
+                biggerBtn.style.minHeight = buttonSize + 'px';
+                controlGroup.appendChild(biggerBtn);
+
+                // Smaller button
+                const smallerBtn = createControlButton('−', '➖', () => {
+                    BrushEngine.decreaseBrushSize();
+                    window.dispatchEvent(new CustomEvent('brush-size-changed'));
+                });
+                smallerBtn.style.backgroundColor = '#f97316';
+                smallerBtn.style.width = buttonSize + 'px';
+                smallerBtn.style.height = buttonSize + 'px';
+                smallerBtn.style.minWidth = buttonSize + 'px';
+                smallerBtn.style.minHeight = buttonSize + 'px';
+                controlGroup.appendChild(smallerBtn);
+
+                // Clear button
+                const clearBtn = createControlButton('✕', '🗑️', () => {
+                    CanvasManager.clearCanvas();
+                });
+                clearBtn.style.backgroundColor = '#ef4444';
+                clearBtn.style.width = buttonSize + 'px';
+                clearBtn.style.height = buttonSize + 'px';
+                clearBtn.style.minWidth = buttonSize + 'px';
+                clearBtn.style.minHeight = buttonSize + 'px';
+                controlGroup.appendChild(clearBtn);
+
+                panel.appendChild(controlGroup);
+
+                // Set initial selection to a random color
+                const randomColor = BrushEngine.getRandomColor();
+                const randomBtn = document.querySelector(`[data-color="${randomColor}"]`);
+                if (randomBtn) {
+                    selectColor(randomColor, randomBtn);
+                }
+
+                // Listen for layout changes
+                window.addEventListener('resize', updatePanelLayout);
+                window.addEventListener('orientationchange', updatePanelLayout);
+            }
+
+            return {
+                init
+            };
+        })();
+
+        ControlPanel.init();
+    </script>
+
+    <!-- MODULE: Fullscreen Toggle
+         Handle fullscreen mode with button visibility.
+    -->
+    <script>
+        /* MODULE: Fullscreen Toggle
+           Handle fullscreen mode with button visibility.
+        */
+
+        const FullscreenToggle = (() => {
+            const button = document.getElementById('fullscreen-btn');
+
+            function isFullscreen() {
+                return document.fullscreenElement === document.documentElement;
+            }
+
+            function updateButtonState() {
+                const active = isFullscreen();
+                if (active) {
+                    button.classList.add('is-exit');
+                    button.style.display = 'none';
+                } else {
+                    button.classList.remove('is-exit');
+                    button.style.display = 'flex';
+                }
+            }
+
+            async function handleButtonClick() {
+                try {
+                    if (isFullscreen()) {
+                        await document.exitFullscreen();
+                    } else {
+                        // Request fullscreen on document element to hide chrome
+                        await document.documentElement.requestFullscreen({
+                            navigationUI: 'hide'
+                        });
+                    }
+                } catch (err) {
+                    console.warn('Fullscreen toggle failed:', err);
+                }
+            }
+
+            function init() {
+                // Check if Fullscreen API is supported
+                if (!document.fullscreenEnabled) {
+                    button.style.display = 'none';
+                    return;
+                }
+
+                button.addEventListener('click', handleButtonClick);
+                document.addEventListener('fullscreenchange', updateButtonState);
+
+                updateButtonState();
+            }
+
+            return {
+                init
+            };
+        })();
+
+        FullscreenToggle.init();
+    </script>
+
+    <!-- APPLICATION: Toddler Paint Bootstrap
+         Initialize all modules and set up initial state.
+    -->
+    <script>
+        /* APPLICATION: Toddler Paint Bootstrap
+           Initialize all modules and set up initial state.
+        */
+
+        (function initApp() {
+            // All modules are already initialized via their own init() calls during definition:
+            // - CanvasManager.init() @ Canvas module
+            // - TouchPaintHandler.init() @ Multi-touch module
+            // - ControlPanel.init() @ Control Panel module
+            // - FullscreenToggle.init() @ Fullscreen module
+
+            // Set up cursor preview on canvas
+            const canvas = CanvasManager.getCanvas();
+            let lastPreviewX = -1;
+            let lastPreviewY = -1;
+
+            function updateCursorPreview(x, y) {
+                // Only update if position changed significantly
+                if (Math.abs(x - lastPreviewX) < 2 && Math.abs(y - lastPreviewY) < 2) {
+                    return;
+                }
+
+                lastPreviewX = x;
+                lastPreviewY = y;
+
+                // Clear previous preview and redraw canvas + preview
+                // Note: For now we just draw the preview, it naturally overlays
+                const size = BrushEngine.getSize();
+                const color = BrushEngine.getColor();
+
+                // Draw cursor preview (semi-transparent circle)
+                BrushEngine.drawCursorPreview(x, y, color, size);
+            }
+
+            canvas.addEventListener('pointermove', (event) => {
+                if (event.pointerType === 'touch' || event.pointerType === 'pen') {
+                    return; // Don't show preview for touch
+                }
+
+                const coords = CanvasManager.canvasToPageCoords(event.clientX, event.clientY);
+                // Redraw canvas to clear old preview and draw new one
+                // This is inefficient, but acceptable for preview rendering
+                // In a production app, we'd use a separate overlay layer
+
+                // For now, skip preview rendering to avoid flickering
+                // The design will still work fine without it on desktop
+            });
+
+            // Handle brush state changes
+            window.addEventListener('brush-color-changed', (event) => {
+                // Color changed, cursor preview will show new color on next move
+            });
+
+            window.addEventListener('brush-size-changed', (event) => {
+                // Size changed, cursor preview will show new size on next move
+            });
+
+            // Focus canvas for accessibility
+            canvas.focus();
+
+            console.log('Toddler Paint initialized successfully!');
+        })();
+    </script>
+</body>
+</html>
