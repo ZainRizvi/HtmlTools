@@ -602,7 +602,7 @@ a { color: #0066cc; }
         }
 
         /**
-         * Clean up HTML content for EPUB compatibility
+         * Clean up HTML content for EPUB compatibility (must be valid XHTML)
          */
         function cleanupHtmlForEpub(html) {
             // Create a temp container
@@ -638,7 +638,27 @@ a { color: #0066cc; }
                 }
             });
 
-            return temp.innerHTML;
+            // Convert to valid XHTML by serializing through XMLSerializer
+            // First, wrap in a proper XML document
+            const xhtmlDoc = document.implementation.createHTMLDocument('');
+            xhtmlDoc.body.innerHTML = temp.innerHTML;
+
+            // Use XMLSerializer to get proper XHTML output
+            const serializer = new XMLSerializer();
+            let xhtml = serializer.serializeToString(xhtmlDoc.body);
+
+            // Remove the outer body tag that XMLSerializer adds
+            xhtml = xhtml.replace(/^<body[^>]*>/, '').replace(/<\/body>$/, '');
+
+            // Fix any remaining issues for EPUB compatibility
+            // Ensure void elements are self-closed properly
+            xhtml = xhtml
+                .replace(/<br\s*>/gi, '<br />')
+                .replace(/<hr\s*>/gi, '<hr />')
+                .replace(/<img([^>]*[^/])>/gi, '<img$1 />')
+                .replace(/&nbsp;/g, '&#160;'); // XHTML doesn't have &nbsp; entity
+
+            return xhtml;
         }
     </script>
 
