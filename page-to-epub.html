@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Convert any web page URL into a downloadable EPUB file for reading on e-readers.">
+    <title>Page to EPUB</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Shim to allow npm-style module.exports to work in browsers -->
+    <script>var module = { exports: {} };</script>
+    <script src="https://cdn.jsdelivr.net/npm/@mozilla/readability@0.6.0/Readability.min.js"></script>
+    <script>
+        // Handle both export styles: module.exports = Readability or module.exports = { Readability }
+        var Readability = typeof module.exports === 'function'
+            ? module.exports
+            : (module.exports.Readability || module.exports.default || module.exports);
+        module = undefined;
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .input-section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        input[type="text"], input[type="url"] {
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            -webkit-appearance: none;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #007AFF;
+        }
+
+        button {
+            width: 100%;
+            padding: 16px;
+            font-size: 18px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .primary-btn {
+            background: #007AFF;
+            color: white;
+        }
+
+        .primary-btn:hover {
+            background: #0056b3;
+        }
+
+        .primary-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .secondary-btn {
+            background: #e0e0e0;
+            color: #333;
+            margin-top: 10px;
+        }
+
+        .secondary-btn:hover {
+            background: #d0d0d0;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            display: none;
+        }
+
+        .status.info {
+            background: #e3f2fd;
+            color: #1565c0;
+            display: block;
+        }
+
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            display: block;
+        }
+
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+            display: block;
+        }
+
+        .fallback-section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .fallback-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        .fallback-section p {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 14px;
+            font-size: 14px;
+            font-family: monospace;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            resize: vertical;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #007AFF;
+        }
+
+        .toggle-fallback {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .toggle-fallback button {
+            background: none;
+            border: none;
+            color: #007AFF;
+            font-size: 14px;
+            padding: 10px;
+            width: auto;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .preview-section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .preview-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        .preview-meta {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+
+        .preview-meta span {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .preview-content {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .preview-content img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #999;
+            font-size: 12px;
+        }
+
+        footer a {
+            color: #007AFF;
+            text-decoration: none;
+        }
+
+        .proxy-info {
+            font-size: 12px;
+            color: #999;
+            text-align: center;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Page to EPUB</h1>
+    <p class="subtitle">Convert web pages to e-reader format</p>
+
+    <div class="input-section">
+        <label for="url-input">Page URL</label>
+        <input type="url" id="url-input" placeholder="https://example.com/article" autocomplete="off" autocapitalize="off">
+
+        <label for="title-input">Title (optional)</label>
+        <input type="text" id="title-input" placeholder="Auto-detected from page">
+
+        <button class="primary-btn" id="convert-btn" onclick="convertFromUrl()">
+            Convert to EPUB
+        </button>
+
+        <p class="proxy-info">Uses a CORS proxy to fetch page content</p>
+
+        <div class="status" id="status"></div>
+    </div>
+
+    <div class="toggle-fallback">
+        <button onclick="toggleFallback()">
+            <span id="toggle-text">▼ Paste HTML manually instead</span>
+        </button>
+    </div>
+
+    <div class="fallback-section hidden" id="fallback-section">
+        <h3>Paste HTML Content</h3>
+        <p>If the URL fetch fails due to CORS restrictions, you can paste the page's HTML here.
+           On your device, view the page source (or use a "view source" bookmarklet) and paste the HTML below.</p>
+
+        <label for="html-input">HTML Content</label>
+        <textarea id="html-input" placeholder="Paste HTML here..."></textarea>
+
+        <label for="source-url">Source URL (for reference)</label>
+        <input type="url" id="source-url" placeholder="https://example.com/article">
+
+        <button class="primary-btn" onclick="convertFromHtml()">
+            Convert Pasted HTML to EPUB
+        </button>
+    </div>
+
+    <div class="preview-section" id="preview-section">
+        <h3>Preview</h3>
+        <div class="preview-meta" id="preview-meta"></div>
+        <div class="preview-content" id="preview-content"></div>
+        <button class="primary-btn" style="margin-top: 15px;" onclick="downloadEpub()">
+            Download EPUB
+        </button>
+    </div>
+
+    <footer>
+        <a href="https://github.com/ZainRizvi/HtmlTools/blob/main/page-to-epub.html" target="_blank">View source on GitHub</a>
+    </footer>
+
+    <!-- MODULE: CORS Proxy Fetcher
+         Fetches content through multiple CORS proxy services with fallback.
+         Copy this entire <script> block for tools that need cross-origin fetching.
+    -->
+    <script>
+        const CORS_PROXIES = [
+            {
+                name: 'allorigins',
+                url: (targetUrl) => `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`
+            },
+            {
+                name: 'corsproxy.io',
+                url: (targetUrl) => `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`
+            },
+            {
+                name: 'cors-anywhere (demo)',
+                url: (targetUrl) => `https://cors-anywhere.herokuapp.com/${targetUrl}`
+            }
+        ];
+
+        /**
+         * Fetch content through CORS proxy with fallback
+         * @param {string} targetUrl - The URL to fetch
+         * @param {function} onStatus - Callback for status updates
+         * @returns {Promise<string>} The fetched HTML content
+         */
+        async function fetchWithCorsProxy(targetUrl, onStatus = () => {}) {
+            let lastError = null;
+
+            for (const proxy of CORS_PROXIES) {
+                onStatus(`Trying ${proxy.name} proxy...`);
+                try {
+                    const response = await fetch(proxy.url(targetUrl), {
+                        headers: {
+                            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                        }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const html = await response.text();
+                    if (html && html.length > 100) {
+                        onStatus(`Fetched via ${proxy.name}`);
+                        return html;
+                    }
+                } catch (err) {
+                    lastError = err;
+                    console.warn(`Proxy ${proxy.name} failed:`, err);
+                }
+            }
+
+            throw new Error(`All proxies failed. Last error: ${lastError?.message || 'Unknown'}`);
+        }
+    </script>
+
+    <!-- MODULE: Readability Content Extractor
+         Extracts readable content from HTML using Mozilla's Readability.
+         Requires Readability.js and DOMPurify to be loaded.
+    -->
+    <script>
+        /**
+         * Extract readable content from HTML
+         * @param {string} html - Raw HTML content
+         * @param {string} baseUrl - Base URL for resolving relative links
+         * @returns {Object} Extracted content with title, content, excerpt, byline
+         */
+        function extractReadableContent(html, baseUrl) {
+            // Create a DOM parser
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            // Fix relative URLs before processing
+            const base = doc.createElement('base');
+            base.href = baseUrl;
+            doc.head.insertBefore(base, doc.head.firstChild);
+
+            // Convert relative URLs to absolute
+            doc.querySelectorAll('img[src]').forEach(img => {
+                try {
+                    img.src = new URL(img.getAttribute('src'), baseUrl).href;
+                } catch (e) {}
+            });
+            doc.querySelectorAll('a[href]').forEach(a => {
+                try {
+                    a.href = new URL(a.getAttribute('href'), baseUrl).href;
+                } catch (e) {}
+            });
+
+            // Clone the document for Readability (it modifies the DOM)
+            const docClone = doc.cloneNode(true);
+
+            // Use Readability to extract content
+            const reader = new Readability(docClone, {
+                charThreshold: 100
+            });
+            const article = reader.parse();
+
+            if (!article) {
+                throw new Error('Could not extract readable content from page');
+            }
+
+            // Sanitize the extracted HTML
+            article.content = DOMPurify.sanitize(article.content, {
+                ALLOWED_TAGS: ['p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                               'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
+                               'a', 'em', 'strong', 'b', 'i', 'img', 'figure',
+                               'figcaption', 'div', 'span', 'table', 'thead',
+                               'tbody', 'tr', 'th', 'td'],
+                ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class']
+            });
+
+            return article;
+        }
+    </script>
+
+    <!-- MODULE: EPUB Generator
+         Creates valid EPUB 3 files from content using JSZip.
+         Requires JSZip to be loaded.
+    -->
+    <script>
+        /**
+         * Generate an EPUB file from content
+         * @param {Object} options - EPUB options
+         * @param {string} options.title - Book title
+         * @param {string} options.author - Book author
+         * @param {string} options.content - HTML content
+         * @param {string} options.sourceUrl - Source URL
+         * @returns {Promise<Blob>} EPUB file as Blob
+         */
+        async function generateEpub({ title, author, content, sourceUrl }) {
+            const zip = new JSZip();
+            const uuid = 'urn:uuid:' + crypto.randomUUID();
+            const now = new Date().toISOString();
+
+            // Mimetype (must be first and uncompressed)
+            zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
+
+            // Container XML
+            zip.file('META-INF/container.xml', `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`);
+
+            // Package document (OPF)
+            zip.file('OEBPS/content.opf', `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="BookId">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="BookId">${uuid}</dc:identifier>
+    <dc:title>${escapeXml(title)}</dc:title>
+    <dc:creator>${escapeXml(author || 'Unknown')}</dc:creator>
+    <dc:language>en</dc:language>
+    <dc:source>${escapeXml(sourceUrl || '')}</dc:source>
+    <meta property="dcterms:modified">${now.split('.')[0]}Z</meta>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="style" href="style.css" media-type="text/css"/>
+  </manifest>
+  <spine>
+    <itemref idref="nav"/>
+    <itemref idref="chapter1"/>
+  </spine>
+</package>`);
+
+            // Navigation document
+            zip.file('OEBPS/nav.xhtml', `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head>
+  <title>Table of Contents</title>
+  <link rel="stylesheet" type="text/css" href="style.css"/>
+</head>
+<body>
+  <nav epub:type="toc">
+    <h1>Table of Contents</h1>
+    <ol>
+      <li><a href="chapter1.xhtml">${escapeXml(title)}</a></li>
+    </ol>
+  </nav>
+</body>
+</html>`);
+
+            // Stylesheet
+            zip.file('OEBPS/style.css', `body {
+  font-family: Georgia, 'Times New Roman', serif;
+  line-height: 1.6;
+  margin: 1em;
+  color: #333;
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+h1 { font-size: 1.8em; }
+h2 { font-size: 1.5em; }
+h3 { font-size: 1.3em; }
+p { margin: 1em 0; text-align: justify; }
+blockquote {
+  margin: 1em 2em;
+  padding-left: 1em;
+  border-left: 3px solid #ccc;
+  font-style: italic;
+}
+pre, code {
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+  background: #f5f5f5;
+}
+pre {
+  padding: 1em;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+img {
+  max-width: 100%;
+  height: auto;
+}
+a { color: #0066cc; }
+.source-info {
+  margin-top: 2em;
+  padding-top: 1em;
+  border-top: 1px solid #ccc;
+  font-size: 0.85em;
+  color: #666;
+}`);
+
+            // Main content chapter
+            const cleanContent = cleanupHtmlForEpub(content);
+            zip.file('OEBPS/chapter1.xhtml', `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <title>${escapeXml(title)}</title>
+  <link rel="stylesheet" type="text/css" href="style.css"/>
+</head>
+<body>
+  <h1>${escapeXml(title)}</h1>
+  ${cleanContent}
+  <div class="source-info">
+    <p>Source: <a href="${escapeXml(sourceUrl || '#')}">${escapeXml(sourceUrl || 'Unknown')}</a></p>
+    <p>Converted: ${new Date().toLocaleDateString()}</p>
+  </div>
+</body>
+</html>`);
+
+            // Generate the EPUB
+            const blob = await zip.generateAsync({
+                type: 'blob',
+                mimeType: 'application/epub+zip',
+                compression: 'DEFLATE',
+                compressionOptions: { level: 9 }
+            });
+
+            return blob;
+        }
+
+        /**
+         * Escape special XML characters
+         */
+        function escapeXml(str) {
+            if (!str) return '';
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        /**
+         * Clean up HTML content for EPUB compatibility
+         */
+        function cleanupHtmlForEpub(html) {
+            // Create a temp container
+            const temp = document.createElement('div');
+            temp.innerHTML = html;
+
+            // Remove script tags
+            temp.querySelectorAll('script, style, iframe').forEach(el => el.remove());
+
+            // Remove empty elements
+            temp.querySelectorAll('p, div, span').forEach(el => {
+                if (!el.textContent.trim() && !el.querySelector('img')) {
+                    el.remove();
+                }
+            });
+
+            // Convert data-src to src for lazy-loaded images
+            temp.querySelectorAll('img[data-src]').forEach(img => {
+                if (!img.src || img.src.includes('placeholder')) {
+                    img.src = img.dataset.src;
+                }
+            });
+
+            // Remove images that failed to load or are tracking pixels
+            temp.querySelectorAll('img').forEach(img => {
+                const src = img.getAttribute('src') || '';
+                if (!src ||
+                    src.startsWith('data:') ||
+                    src.includes('pixel') ||
+                    src.includes('tracking') ||
+                    src.includes('1x1')) {
+                    img.remove();
+                }
+            });
+
+            return temp.innerHTML;
+        }
+    </script>
+
+    <!-- APPLICATION: Page to EPUB Main Logic -->
+    <script>
+        let currentEpubBlob = null;
+        let currentTitle = '';
+
+        function setStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + type;
+        }
+
+        function setButtonLoading(btn, loading) {
+            if (loading) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span>Converting...';
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = 'Convert to EPUB';
+            }
+        }
+
+        function toggleFallback() {
+            const section = document.getElementById('fallback-section');
+            const text = document.getElementById('toggle-text');
+            if (section.classList.contains('hidden')) {
+                section.classList.remove('hidden');
+                text.textContent = '▲ Hide manual HTML input';
+            } else {
+                section.classList.add('hidden');
+                text.textContent = '▼ Paste HTML manually instead';
+            }
+        }
+
+        function showPreview(article, sourceUrl) {
+            const previewSection = document.getElementById('preview-section');
+            const previewMeta = document.getElementById('preview-meta');
+            const previewContent = document.getElementById('preview-content');
+
+            previewMeta.innerHTML = `
+                <span><strong>Title:</strong> ${escapeXml(article.title)}</span>
+                ${article.byline ? `<span><strong>Author:</strong> ${escapeXml(article.byline)}</span>` : ''}
+                <span><strong>Source:</strong> ${escapeXml(sourceUrl)}</span>
+                ${article.excerpt ? `<span><strong>Excerpt:</strong> ${escapeXml(article.excerpt.substring(0, 150))}...</span>` : ''}
+            `;
+
+            previewContent.innerHTML = article.content;
+            previewSection.style.display = 'block';
+            previewSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function convertFromUrl() {
+            const urlInput = document.getElementById('url-input');
+            const titleInput = document.getElementById('title-input');
+            const convertBtn = document.getElementById('convert-btn');
+
+            const url = urlInput.value.trim();
+            if (!url) {
+                setStatus('Please enter a URL', 'error');
+                return;
+            }
+
+            // Validate URL
+            try {
+                new URL(url);
+            } catch (e) {
+                setStatus('Please enter a valid URL', 'error');
+                return;
+            }
+
+            setButtonLoading(convertBtn, true);
+            setStatus('Fetching page...', 'info');
+
+            try {
+                // Fetch the page via CORS proxy
+                const html = await fetchWithCorsProxy(url, (msg) => setStatus(msg, 'info'));
+
+                setStatus('Extracting content...', 'info');
+
+                // Extract readable content
+                const article = extractReadableContent(html, url);
+
+                // Use custom title if provided, otherwise use extracted title
+                const title = titleInput.value.trim() || article.title || 'Untitled';
+                currentTitle = title;
+
+                setStatus('Generating EPUB...', 'info');
+
+                // Generate EPUB
+                currentEpubBlob = await generateEpub({
+                    title: title,
+                    author: article.byline || '',
+                    content: article.content,
+                    sourceUrl: url
+                });
+
+                // Show preview
+                showPreview({ ...article, title }, url);
+                setStatus('Ready to download!', 'success');
+
+            } catch (err) {
+                console.error(err);
+                setStatus(`Error: ${err.message}. Try pasting HTML manually.`, 'error');
+
+                // Show fallback section
+                document.getElementById('fallback-section').classList.remove('hidden');
+                document.getElementById('toggle-text').textContent = '▲ Hide manual HTML input';
+                document.getElementById('source-url').value = url;
+            } finally {
+                setButtonLoading(convertBtn, false);
+            }
+        }
+
+        async function convertFromHtml() {
+            const htmlInput = document.getElementById('html-input');
+            const sourceUrl = document.getElementById('source-url').value.trim();
+            const titleInput = document.getElementById('title-input');
+
+            const html = htmlInput.value.trim();
+            if (!html) {
+                setStatus('Please paste some HTML content', 'error');
+                return;
+            }
+
+            setStatus('Extracting content...', 'info');
+
+            try {
+                // Extract readable content
+                const article = extractReadableContent(html, sourceUrl || 'about:blank');
+
+                // Use custom title if provided, otherwise use extracted title
+                const title = titleInput.value.trim() || article.title || 'Untitled';
+                currentTitle = title;
+
+                setStatus('Generating EPUB...', 'info');
+
+                // Generate EPUB
+                currentEpubBlob = await generateEpub({
+                    title: title,
+                    author: article.byline || '',
+                    content: article.content,
+                    sourceUrl: sourceUrl || ''
+                });
+
+                // Show preview
+                showPreview({ ...article, title }, sourceUrl || 'Pasted HTML');
+                setStatus('Ready to download!', 'success');
+
+            } catch (err) {
+                console.error(err);
+                setStatus(`Error: ${err.message}`, 'error');
+            }
+        }
+
+        function downloadEpub() {
+            if (!currentEpubBlob) {
+                setStatus('No EPUB to download. Convert a page first.', 'error');
+                return;
+            }
+
+            // Create filename from title
+            const filename = currentTitle
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-|-$/g, '')
+                .substring(0, 50) + '.epub';
+
+            // Create download link
+            const url = URL.createObjectURL(currentEpubBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            setStatus(`Downloaded: ${filename}`, 'success');
+        }
+
+        // Handle Enter key in URL input
+        document.getElementById('url-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                convertFromUrl();
+            }
+        });
+
+        // Handle paste in URL input - auto-convert if it looks like a URL
+        document.getElementById('url-input').addEventListener('paste', (e) => {
+            setTimeout(() => {
+                const value = e.target.value.trim();
+                if (value && (value.startsWith('http://') || value.startsWith('https://'))) {
+                    // Small delay to let user see what was pasted
+                    setTimeout(() => convertFromUrl(), 500);
+                }
+            }, 0);
+        });
+    </script>
+</body>
+</html>

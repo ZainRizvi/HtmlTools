@@ -6,3 +6,11 @@
 
 # OS files
 .DS_Store
+
+# Node.js
+node_modules/
+package-lock.json
+
+# Test artifacts
+test-results/
+playwright-report/
