@@ -1,0 +1,22 @@
+{
+  "name": "htmltools",
+  "version": "1.0.0",
+  "description": "This repo is (re)booting as a home for **HTML tools**: small, useful web apps that are **static-hostable** and usually live as **one `.html` file** with inline JavaScript and CSS.",
+  "main": "page-to-epub.spec.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:43197/git/ZainRizvi/HtmlTools"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
+  }
+}
