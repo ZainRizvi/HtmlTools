@@ -536,11 +536,11 @@
                 <input
                     type="text"
                     id="llm-model"
-                    placeholder="anthropic/claude-sonnet-4"
+                    placeholder="anthropic/claude-sonnet-4.5"
                     onchange="saveLLMModel()"
                 >
                 <small>
-                    Default: anthropic/claude-sonnet-4. See <a href="https://openrouter.ai/models" target="_blank">available models</a>
+                    Default: anthropic/claude-sonnet-4.5. See <a href="https://openrouter.ai/models" target="_blank">available models</a>
                 </small>
             </div>
 
@@ -569,7 +569,7 @@
         // Constants
         const TWEET_MAX_LENGTH = 280;
         const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-        const DEFAULT_MODEL = 'anthropic/claude-sonnet-4';
+        const DEFAULT_MODEL = 'anthropic/claude-sonnet-4.5';
 
         // State
         let formattedTweets = [];
