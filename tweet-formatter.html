@@ -296,7 +296,8 @@
             font-weight: 500;
         }
 
-        .setting-group input {
+        .setting-group input,
+        .setting-group textarea {
             width: 100%;
             padding: 12px;
             border: 1px solid #536471;
@@ -306,7 +307,15 @@
             font-size: 1rem;
         }
 
-        .setting-group input:focus {
+        .setting-group textarea {
+            min-height: 200px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        .setting-group input:focus,
+        .setting-group textarea:focus {
             outline: none;
             border-color: #1d9bf0;
         }
@@ -405,6 +414,51 @@
             padding: 4px 0;
         }
 
+        .variant-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .variant-option {
+            padding: 12px;
+            border: 2px solid #38444d;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .variant-option:hover {
+            border-color: #536471;
+            background: rgba(239, 243, 244, 0.03);
+        }
+
+        .variant-option.selected {
+            border-color: #1d9bf0;
+            background: rgba(29, 155, 240, 0.1);
+        }
+
+        .variant-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+            color: #71767b;
+        }
+
+        .variant-label .label {
+            font-weight: 600;
+            color: #8ecdf8;
+        }
+
+        .variant-text {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+
         .edit-textarea {
             width: 100%;
             min-height: 100px;
@@ -438,6 +492,22 @@
 
         .clear-btn:hover {
             background: rgba(244, 33, 46, 0.1);
+        }
+
+        .reset-btn {
+            background: transparent;
+            color: #71767b;
+            border: 1px solid #536471;
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+
+        .reset-btn:hover {
+            background: rgba(239, 243, 244, 0.1);
+            color: #e7e9ea;
         }
 
         footer {
@@ -545,6 +615,19 @@
             </div>
 
             <div class="setting-group">
+                <label for="system-prompt">System Prompt</label>
+                <textarea
+                    id="system-prompt"
+                    placeholder="Enter custom system prompt..."
+                    onchange="saveSystemPrompt()"
+                ></textarea>
+                <small>
+                    Customize how the LLM formats your tweets. Must return a JSON array of [variantA, variantB] pairs.
+                </small>
+                <button class="reset-btn" onclick="resetSystemPrompt()">Reset to Default</button>
+            </div>
+
+            <div class="setting-group">
                 <label>Twitter Posting</label>
                 <div class="info-box" style="margin-top: 8px;">
                     This tool uses Twitter Web Intents to post tweets. When you click "Post", Twitter's compose window opens with your tweet pre-filled. You just click "Tweet" to post.
@@ -570,31 +653,47 @@
         const TWEET_MAX_LENGTH = 280;
         const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
         const DEFAULT_MODEL = 'anthropic/claude-sonnet-4.5';
+        const DEFAULT_PROMPT = `You are a tweet formatter. Your job is to take raw text (often dictated speech) and format it into one or more tweets.
+
+Rules:
+1. Each tweet MUST be 280 characters or less
+2. If the content fits in one tweet, return just one tweet
+3. If it needs multiple tweets (a thread), number them like "1/" at the start
+4. Preserve the user's voice and key points
+5. Take small but reasonable effort to rephrase for better engagement while keeping the user's authentic voice
+6. Fix obvious dictation errors (e.g., "comma" should be ",")
+7. Don't add hashtags unless the user mentioned them
+8. For threads, each tweet should flow naturally to the next
+9. Do NOT end sentences with periods unless the user explicitly included them - tweets read better without trailing periods
+10. For EACH tweet position, provide TWO variant options (A and B) so the user can choose their preferred version
+
+Output format: Return ONLY a JSON array where each element is a 2-element array containing variant A and variant B. Example for a thread:
+[["1/ First tweet variant A", "1/ First tweet variant B"], ["2/ Second tweet variant A", "2/ Second tweet variant B"]]
+
+For a single tweet:
+[["Single tweet variant A", "Single tweet variant B"]]
+
+Do not include any other text, just the JSON array.`;
 
         // State
-        let formattedTweets = [];
+        let tweetVariants = [];      // Array of [variantA, variantB] pairs
+        let selectedVariants = [];   // Array of selected indices (0 or 1) for each tweet
 
         // Initialize on load
         document.addEventListener('DOMContentLoaded', () => {
             loadSettings();
             updateStatusIndicators();
-
-            // Allow Enter key to submit (Shift+Enter for newline)
-            document.getElementById('input-text').addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    formatTweets();
-                }
-            });
         });
 
         // Settings management
         function loadSettings() {
             const openrouterKey = localStorage.getItem('openrouter_api_key') || '';
             const llmModel = localStorage.getItem('llm_model') || DEFAULT_MODEL;
+            const systemPrompt = localStorage.getItem('system_prompt') || DEFAULT_PROMPT;
 
             document.getElementById('openrouter-key').value = openrouterKey;
             document.getElementById('llm-model').value = llmModel;
+            document.getElementById('system-prompt').value = systemPrompt;
         }
 
         function saveOpenRouterKey() {
@@ -610,6 +709,20 @@
         function saveLLMModel() {
             const model = document.getElementById('llm-model').value.trim() || DEFAULT_MODEL;
             localStorage.setItem('llm_model', model);
+        }
+
+        function saveSystemPrompt() {
+            const prompt = document.getElementById('system-prompt').value.trim();
+            if (prompt && prompt !== DEFAULT_PROMPT) {
+                localStorage.setItem('system_prompt', prompt);
+            } else {
+                localStorage.removeItem('system_prompt');
+            }
+        }
+
+        function resetSystemPrompt() {
+            document.getElementById('system-prompt').value = DEFAULT_PROMPT;
+            localStorage.removeItem('system_prompt');
         }
 
         function updateStatusIndicators() {
@@ -645,6 +758,7 @@
             if (confirm('Clear all stored settings and API keys?')) {
                 localStorage.removeItem('openrouter_api_key');
                 localStorage.removeItem('llm_model');
+                localStorage.removeItem('system_prompt');
                 loadSettings();
                 updateStatusIndicators();
                 alert('All data cleared.');
@@ -681,9 +795,10 @@
             document.getElementById('format-btn').disabled = true;
 
             try {
-                const tweets = await callLLMForFormatting(inputText, apiKey);
-                formattedTweets = tweets;
-                displayTweets(tweets);
+                const variants = await callLLMForFormatting(inputText, apiKey);
+                tweetVariants = variants;
+                selectedVariants = variants.map(() => 0); // Default to variant A
+                displayTweets();
             } catch (error) {
                 showError(`Error: ${error.message}`);
             } finally {
@@ -694,26 +809,7 @@
 
         async function callLLMForFormatting(text, apiKey) {
             const model = localStorage.getItem('llm_model') || DEFAULT_MODEL;
-
-            const systemPrompt = `You are a tweet formatter. Your job is to take raw text (often dictated speech) and format it into one or more tweets.
-
-Rules:
-1. Each tweet MUST be 280 characters or less
-2. If the content fits in one tweet, return just one tweet
-3. If it needs multiple tweets (a thread), number them like "1/" at the start
-4. Preserve the user's voice and key points
-5. Make tweets readable and engaging
-6. Fix obvious dictation errors (e.g., "comma" should be ",")
-7. Don't add hashtags unless the user mentioned them
-8. For threads, each tweet should flow naturally to the next
-
-Output format: Return ONLY a JSON array of strings, where each string is a tweet. Example:
-["First tweet here", "2/ Second tweet continues...", "3/ Final tweet"]
-
-Or for a single tweet:
-["Just one tweet that fits!"]
-
-Do not include any other text, just the JSON array.`;
+            const systemPrompt = localStorage.getItem('system_prompt') || DEFAULT_PROMPT;
 
             const response = await fetch(OPENROUTER_API_URL, {
                 method: 'POST',
@@ -749,18 +845,27 @@ Do not include any other text, just the JSON array.`;
             try {
                 // Try to extract JSON from the response (in case there's extra text)
                 const jsonMatch = content.match(/\[[\s\S]*\]/);
-                if (jsonMatch) {
-                    return JSON.parse(jsonMatch[0]);
+                const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(content);
+
+                // Validate format: should be array of [variantA, variantB] pairs
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    // Check if it's the new format (array of arrays)
+                    if (Array.isArray(parsed[0]) && parsed[0].length === 2) {
+                        return parsed;
+                    }
+                    // Old format (array of strings) - convert to new format by duplicating
+                    return parsed.map(tweet => [tweet, tweet]);
                 }
-                return JSON.parse(content);
+                throw new Error('Invalid response format');
             } catch (e) {
-                // If parsing fails, treat the whole response as a single tweet
+                // If parsing fails, treat the whole response as a single tweet with same variant
                 console.warn('Could not parse LLM response as JSON, using as single tweet');
-                return [content.trim()];
+                const tweet = content.trim();
+                return [[tweet, tweet]];
             }
         }
 
-        function displayTweets(tweets) {
+        function displayTweets() {
             const container = document.getElementById('tweets-container');
             const outputSection = document.getElementById('output-section');
             const title = document.getElementById('output-title');
@@ -768,20 +873,20 @@ Do not include any other text, just the JSON array.`;
 
             container.innerHTML = '';
 
-            if (tweets.length === 1) {
+            if (tweetVariants.length === 1) {
                 title.textContent = 'Your Tweet';
                 postAllBtn.textContent = 'Post to Twitter';
             } else {
-                title.textContent = `Tweet Thread (${tweets.length} tweets)`;
+                title.textContent = `Tweet Thread (${tweetVariants.length} tweets)`;
                 postAllBtn.textContent = 'Post Thread to Twitter';
             }
 
-            tweets.forEach((tweet, index) => {
-                const card = createTweetCard(tweet, index, tweets.length);
+            tweetVariants.forEach((variants, index) => {
+                const card = createTweetCard(variants, index, tweetVariants.length);
                 container.appendChild(card);
 
                 // Add thread connector for multi-tweet threads
-                if (tweets.length > 1 && index < tweets.length - 1) {
+                if (tweetVariants.length > 1 && index < tweetVariants.length - 1) {
                     const connector = document.createElement('div');
                     connector.className = 'thread-indicator';
                     connector.textContent = '│';
@@ -792,20 +897,56 @@ Do not include any other text, just the JSON array.`;
             outputSection.style.display = 'block';
         }
 
-        function createTweetCard(tweet, index, total) {
+        function getSelectedTweet(index) {
+            return tweetVariants[index][selectedVariants[index]];
+        }
+
+        function createTweetCard(variants, index, total) {
             const card = document.createElement('div');
             card.className = 'tweet-card';
             card.dataset.index = index;
 
-            const charCount = tweet.length;
+            const [variantA, variantB] = variants;
+            const selectedIdx = selectedVariants[index];
+            const selectedTweet = variants[selectedIdx];
+            const charCount = selectedTweet.length;
             const isOverLimit = charCount > TWEET_MAX_LENGTH;
+
+            // Check if variants are different
+            const variantsAreDifferent = variantA !== variantB;
+
+            let variantHtml = '';
+            if (variantsAreDifferent) {
+                variantHtml = `
+                    <div class="variant-container">
+                        <div class="variant-option ${selectedIdx === 0 ? 'selected' : ''}" onclick="selectVariant(${index}, 0)">
+                            <div class="variant-label">
+                                <span class="label">Option A</span>
+                                <span>${variantA.length}/${TWEET_MAX_LENGTH}</span>
+                            </div>
+                            <div class="variant-text">${escapeHtml(variantA)}</div>
+                        </div>
+                        <div class="variant-option ${selectedIdx === 1 ? 'selected' : ''}" onclick="selectVariant(${index}, 1)">
+                            <div class="variant-label">
+                                <span class="label">Option B</span>
+                                <span>${variantB.length}/${TWEET_MAX_LENGTH}</span>
+                            </div>
+                            <div class="variant-text">${escapeHtml(variantB)}</div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                variantHtml = `
+                    <div class="tweet-content" id="tweet-content-${index}">${escapeHtml(selectedTweet)}</div>
+                `;
+            }
 
             card.innerHTML = `
                 <div class="tweet-header">
-                    <span class="tweet-number">${total > 1 ? `Tweet ${index + 1} of ${total}` : 'Tweet'}</span>
+                    <span class="tweet-number">${total > 1 ? `Tweet ${index + 1} of ${total}` : 'Tweet'}${variantsAreDifferent ? ' - Choose a version' : ''}</span>
                     <span class="char-count ${isOverLimit ? 'warning' : ''}">${charCount}/${TWEET_MAX_LENGTH}</span>
                 </div>
-                <div class="tweet-content" id="tweet-content-${index}">${escapeHtml(tweet)}</div>
+                ${variantHtml}
                 <div class="tweet-actions">
                     <button class="btn-post" onclick="postTweet(${index})">Post</button>
                     <button class="btn-copy" onclick="copyTweet(${index})">Copy</button>
@@ -816,6 +957,11 @@ Do not include any other text, just the JSON array.`;
             return card;
         }
 
+        function selectVariant(tweetIndex, variantIndex) {
+            selectedVariants[tweetIndex] = variantIndex;
+            displayTweets();
+        }
+
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
@@ -823,13 +969,13 @@ Do not include any other text, just the JSON array.`;
         }
 
         function postTweet(index) {
-            const tweet = formattedTweets[index];
+            const tweet = getSelectedTweet(index);
             const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweet)}`;
             window.open(tweetUrl, '_blank', 'width=550,height=420');
         }
 
         function postAllTweets() {
-            if (formattedTweets.length === 1) {
+            if (tweetVariants.length === 1) {
                 postTweet(0);
                 return;
             }
@@ -844,13 +990,13 @@ Do not include any other text, just the JSON array.`;
         }
 
         function postTweetsSequentially(index) {
-            if (index >= formattedTweets.length) {
+            if (index >= tweetVariants.length) {
                 return;
             }
 
             postTweet(index);
 
-            if (index < formattedTweets.length - 1) {
+            if (index < tweetVariants.length - 1) {
                 setTimeout(() => {
                     if (confirm(`Tweet ${index + 1} opened. Ready for tweet ${index + 2}?`)) {
                         postTweetsSequentially(index + 1);
@@ -860,7 +1006,7 @@ Do not include any other text, just the JSON array.`;
         }
 
         function copyTweet(index) {
-            const tweet = formattedTweets[index];
+            const tweet = getSelectedTweet(index);
             navigator.clipboard.writeText(tweet).then(() => {
                 const btn = document.querySelector(`.tweet-card[data-index="${index}"] .btn-copy`);
                 const originalText = btn.textContent;
@@ -875,14 +1021,20 @@ Do not include any other text, just the JSON array.`;
 
         function editTweet(index) {
             const card = document.querySelector(`.tweet-card[data-index="${index}"]`);
-            const contentDiv = document.getElementById(`tweet-content-${index}`);
-            const currentText = formattedTweets[index];
+            const currentText = getSelectedTweet(index);
 
-            contentDiv.innerHTML = `
-                <textarea class="edit-textarea" id="edit-textarea-${index}">${escapeHtml(currentText)}</textarea>
-                <div class="edit-actions">
-                    <button class="btn-secondary" onclick="cancelEdit(${index})">Cancel</button>
-                    <button class="btn-post" onclick="saveEdit(${index})">Save</button>
+            // Replace the variant container or content with edit textarea
+            const variantContainer = card.querySelector('.variant-container');
+            const contentDiv = card.querySelector('.tweet-content');
+            const targetDiv = variantContainer || contentDiv;
+
+            targetDiv.outerHTML = `
+                <div id="edit-container-${index}">
+                    <textarea class="edit-textarea" id="edit-textarea-${index}">${escapeHtml(currentText)}</textarea>
+                    <div class="edit-actions">
+                        <button class="btn-secondary" onclick="cancelEdit(${index})">Cancel</button>
+                        <button class="btn-post" onclick="saveEdit(${index})">Save</button>
+                    </div>
                 </div>
             `;
 
@@ -905,13 +1057,15 @@ Do not include any other text, just the JSON array.`;
             const newText = textarea.value.trim();
 
             if (newText) {
-                formattedTweets[index] = newText;
-                displayTweets(formattedTweets);
+                // Update both variants to the edited text (user's custom version)
+                tweetVariants[index] = [newText, newText];
+                selectedVariants[index] = 0;
+                displayTweets();
             }
         }
 
         function cancelEdit(index) {
-            displayTweets(formattedTweets);
+            displayTweets();
         }
 
         function showError(message) {
