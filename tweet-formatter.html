@@ -296,7 +296,8 @@
             font-weight: 500;
         }
 
-        .setting-group input {
+        .setting-group input,
+        .setting-group textarea {
             width: 100%;
             padding: 12px;
             border: 1px solid #536471;
@@ -306,7 +307,15 @@
             font-size: 1rem;
         }
 
-        .setting-group input:focus {
+        .setting-group textarea {
+            min-height: 200px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        .setting-group input:focus,
+        .setting-group textarea:focus {
             outline: none;
             border-color: #1d9bf0;
         }
@@ -440,6 +449,22 @@
             background: rgba(244, 33, 46, 0.1);
         }
 
+        .reset-btn {
+            background: transparent;
+            color: #71767b;
+            border: 1px solid #536471;
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+
+        .reset-btn:hover {
+            background: rgba(239, 243, 244, 0.1);
+            color: #e7e9ea;
+        }
+
         footer {
             margin-top: 40px;
             padding-top: 20px;
@@ -545,6 +570,19 @@
             </div>
 
             <div class="setting-group">
+                <label for="system-prompt">System Prompt</label>
+                <textarea
+                    id="system-prompt"
+                    placeholder="Enter custom system prompt..."
+                    onchange="saveSystemPrompt()"
+                ></textarea>
+                <small>
+                    Customize how the LLM formats your tweets. Must instruct it to return a JSON array of strings.
+                </small>
+                <button class="reset-btn" onclick="resetSystemPrompt()">Reset to Default</button>
+            </div>
+
+            <div class="setting-group">
                 <label>Twitter Posting</label>
                 <div class="info-box" style="margin-top: 8px;">
                     This tool uses Twitter Web Intents to post tweets. When you click "Post", Twitter's compose window opens with your tweet pre-filled. You just click "Tweet" to post.
@@ -570,6 +608,25 @@
         const TWEET_MAX_LENGTH = 280;
         const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
         const DEFAULT_MODEL = 'anthropic/claude-sonnet-4.5';
+        const DEFAULT_PROMPT = `You are a tweet formatter. Your job is to take raw text (often dictated speech) and format it into one or more tweets.
+
+Rules:
+1. Each tweet MUST be 280 characters or less
+2. If the content fits in one tweet, return just one tweet
+3. If it needs multiple tweets (a thread), number them like "1/" at the start
+4. Preserve the user's voice and key points
+5. Make tweets readable and engaging
+6. Fix obvious dictation errors (e.g., "comma" should be ",")
+7. Don't add hashtags unless the user mentioned them
+8. For threads, each tweet should flow naturally to the next
+
+Output format: Return ONLY a JSON array of strings, where each string is a tweet. Example:
+["First tweet here", "2/ Second tweet continues...", "3/ Final tweet"]
+
+Or for a single tweet:
+["Just one tweet that fits!"]
+
+Do not include any other text, just the JSON array.`;
 
         // State
         let formattedTweets = [];
@@ -592,9 +649,11 @@
         function loadSettings() {
             const openrouterKey = localStorage.getItem('openrouter_api_key') || '';
             const llmModel = localStorage.getItem('llm_model') || DEFAULT_MODEL;
+            const systemPrompt = localStorage.getItem('system_prompt') || DEFAULT_PROMPT;
 
             document.getElementById('openrouter-key').value = openrouterKey;
             document.getElementById('llm-model').value = llmModel;
+            document.getElementById('system-prompt').value = systemPrompt;
         }
 
         function saveOpenRouterKey() {
@@ -610,6 +669,20 @@
         function saveLLMModel() {
             const model = document.getElementById('llm-model').value.trim() || DEFAULT_MODEL;
             localStorage.setItem('llm_model', model);
+        }
+
+        function saveSystemPrompt() {
+            const prompt = document.getElementById('system-prompt').value.trim();
+            if (prompt && prompt !== DEFAULT_PROMPT) {
+                localStorage.setItem('system_prompt', prompt);
+            } else {
+                localStorage.removeItem('system_prompt');
+            }
+        }
+
+        function resetSystemPrompt() {
+            document.getElementById('system-prompt').value = DEFAULT_PROMPT;
+            localStorage.removeItem('system_prompt');
         }
 
         function updateStatusIndicators() {
@@ -645,6 +718,7 @@
             if (confirm('Clear all stored settings and API keys?')) {
                 localStorage.removeItem('openrouter_api_key');
                 localStorage.removeItem('llm_model');
+                localStorage.removeItem('system_prompt');
                 loadSettings();
                 updateStatusIndicators();
                 alert('All data cleared.');
@@ -694,26 +768,7 @@
 
         async function callLLMForFormatting(text, apiKey) {
             const model = localStorage.getItem('llm_model') || DEFAULT_MODEL;
-
-            const systemPrompt = `You are a tweet formatter. Your job is to take raw text (often dictated speech) and format it into one or more tweets.
-
-Rules:
-1. Each tweet MUST be 280 characters or less
-2. If the content fits in one tweet, return just one tweet
-3. If it needs multiple tweets (a thread), number them like "1/" at the start
-4. Preserve the user's voice and key points
-5. Make tweets readable and engaging
-6. Fix obvious dictation errors (e.g., "comma" should be ",")
-7. Don't add hashtags unless the user mentioned them
-8. For threads, each tweet should flow naturally to the next
-
-Output format: Return ONLY a JSON array of strings, where each string is a tweet. Example:
-["First tweet here", "2/ Second tweet continues...", "3/ Final tweet"]
-
-Or for a single tweet:
-["Just one tweet that fits!"]
-
-Do not include any other text, just the JSON array.`;
+            const systemPrompt = localStorage.getItem('system_prompt') || DEFAULT_PROMPT;
 
             const response = await fetch(OPENROUTER_API_URL, {
                 method: 'POST',
