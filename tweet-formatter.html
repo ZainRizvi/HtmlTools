@@ -18,6 +18,11 @@
             background: #15202b;
             color: #e7e9ea;
             min-height: 100vh;
+            transition: max-width 0.3s ease;
+        }
+
+        body.wide-mode {
+            max-width: 1000px;
         }
 
         h1 {
@@ -426,16 +431,23 @@
 
         .thread-options {
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             gap: 16px;
         }
 
         .thread-option {
+            flex: 1;
             border: 2px solid #38444d;
             border-radius: 16px;
             padding: 16px;
             cursor: pointer;
             transition: border-color 0.2s, background 0.2s;
+        }
+
+        @media (max-width: 900px) {
+            .thread-options {
+                flex-direction: column;
+            }
         }
 
         .thread-option:hover {
@@ -982,6 +994,7 @@ Do not include any other text, just the JSON array.`;
                 // Single tweet: show variant options directly
                 title.textContent = 'Your Tweet';
                 postAllBtn.textContent = 'Post to Twitter';
+                document.body.classList.remove('wide-mode');
                 const card = createSingleTweetCard(tweetVariants[0], 0);
                 container.appendChild(card);
             } else {
@@ -989,11 +1002,16 @@ Do not include any other text, just the JSON array.`;
                 title.textContent = `Tweet Thread (${tweetVariants.length} tweets)`;
                 postAllBtn.textContent = 'Post Thread to Twitter';
 
-                if (!threadConfirmed) {
-                    // Show thread selection UI
+                // Check if variants are different for wide mode decision
+                const threadsAreDifferent = tweetVariants.some(([a, b]) => a !== b);
+
+                if (!threadConfirmed && threadsAreDifferent) {
+                    // Show thread selection UI in wide mode
+                    document.body.classList.add('wide-mode');
                     container.appendChild(createThreadSelectionUI());
                 } else {
-                    // Show confirmed thread with ability to switch
+                    // Show confirmed thread (narrow mode)
+                    document.body.classList.remove('wide-mode');
                     container.appendChild(createConfirmedThreadUI());
                 }
             }
