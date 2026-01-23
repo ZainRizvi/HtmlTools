@@ -414,6 +414,108 @@
             padding: 4px 0;
         }
 
+        .thread-selection {
+            margin-bottom: 24px;
+        }
+
+        .thread-selection h3 {
+            font-size: 1rem;
+            color: #71767b;
+            margin-bottom: 12px;
+        }
+
+        .thread-options {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .thread-option {
+            border: 2px solid #38444d;
+            border-radius: 16px;
+            padding: 16px;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .thread-option:hover {
+            border-color: #536471;
+            background: rgba(239, 243, 244, 0.03);
+        }
+
+        .thread-option.selected {
+            border-color: #1d9bf0;
+            background: rgba(29, 155, 240, 0.1);
+        }
+
+        .thread-option-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .thread-option-label {
+            font-weight: 600;
+            color: #8ecdf8;
+            font-size: 0.9rem;
+        }
+
+        .thread-option-stats {
+            color: #71767b;
+            font-size: 0.8rem;
+        }
+
+        .thread-preview {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .thread-preview-tweet {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .thread-preview-number {
+            color: #71767b;
+            font-size: 0.75rem;
+            margin-bottom: 4px;
+        }
+
+        .selected-thread-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #38444d;
+        }
+
+        .selected-thread-label {
+            font-size: 0.9rem;
+            color: #71767b;
+        }
+
+        .switch-thread-btn {
+            background: transparent;
+            color: #1d9bf0;
+            border: 1px solid #1d9bf0;
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+
+        .switch-thread-btn:hover {
+            background: rgba(29, 155, 240, 0.1);
+        }
+
         .variant-container {
             display: flex;
             flex-direction: column;
@@ -658,17 +760,18 @@
 Rules:
 1. Each tweet MUST be 280 characters or less
 2. If the content fits in one tweet, return just one tweet
-3. If it needs multiple tweets (a thread), number them like "1/" at the start
+3. If it needs multiple tweets (a thread), put the thread number at the END of each tweet like "1/" or "2/" (not at the start)
 4. Preserve the user's voice and key points
 5. Take small but reasonable effort to rephrase for better engagement while keeping the user's authentic voice
 6. Fix obvious dictation errors (e.g., "comma" should be ",")
 7. Don't add hashtags unless the user mentioned them
 8. For threads, each tweet should flow naturally to the next
 9. Do NOT end sentences with periods unless the user explicitly included them - tweets read better without trailing periods
-10. For EACH tweet position, provide TWO variant options (A and B) so the user can choose their preferred version
+10. NEVER use em-dashes (—) or spaced hyphens (" - ") - these are associated with AI-generated content. Use commas, colons, or restructure the sentence instead
+11. For EACH tweet position, provide TWO variant options (A and B) so the user can choose their preferred version
 
 Output format: Return ONLY a JSON array where each element is a 2-element array containing variant A and variant B. Example for a thread:
-[["1/ First tweet variant A", "1/ First tweet variant B"], ["2/ Second tweet variant A", "2/ Second tweet variant B"]]
+[["First tweet variant A 1/", "First tweet variant B 1/"], ["Second tweet variant A 2/", "Second tweet variant B 2/"]]
 
 For a single tweet:
 [["Single tweet variant A", "Single tweet variant B"]]
@@ -677,7 +780,8 @@ Do not include any other text, just the JSON array.`;
 
         // State
         let tweetVariants = [];      // Array of [variantA, variantB] pairs
-        let selectedVariants = [];   // Array of selected indices (0 or 1) for each tweet
+        let selectedThread = null;   // 0 for Thread A, 1 for Thread B, null for not yet selected
+        let threadConfirmed = false; // Whether user has confirmed their thread choice
 
         // Initialize on load
         document.addEventListener('DOMContentLoaded', () => {
@@ -797,7 +901,8 @@ Do not include any other text, just the JSON array.`;
             try {
                 const variants = await callLLMForFormatting(inputText, apiKey);
                 tweetVariants = variants;
-                selectedVariants = variants.map(() => 0); // Default to variant A
+                selectedThread = 0; // Default to Thread A
+                threadConfirmed = tweetVariants.length === 1; // Auto-confirm for single tweets
                 displayTweets();
             } catch (error) {
                 showError(`Error: ${error.message}`);
@@ -874,59 +979,145 @@ Do not include any other text, just the JSON array.`;
             container.innerHTML = '';
 
             if (tweetVariants.length === 1) {
+                // Single tweet: show variant options directly
                 title.textContent = 'Your Tweet';
                 postAllBtn.textContent = 'Post to Twitter';
+                const card = createSingleTweetCard(tweetVariants[0], 0);
+                container.appendChild(card);
             } else {
+                // Thread: show thread selection or confirmed thread
                 title.textContent = `Tweet Thread (${tweetVariants.length} tweets)`;
                 postAllBtn.textContent = 'Post Thread to Twitter';
-            }
 
-            tweetVariants.forEach((variants, index) => {
-                const card = createTweetCard(variants, index, tweetVariants.length);
-                container.appendChild(card);
-
-                // Add thread connector for multi-tweet threads
-                if (tweetVariants.length > 1 && index < tweetVariants.length - 1) {
-                    const connector = document.createElement('div');
-                    connector.className = 'thread-indicator';
-                    connector.textContent = '│';
-                    container.appendChild(connector);
+                if (!threadConfirmed) {
+                    // Show thread selection UI
+                    container.appendChild(createThreadSelectionUI());
+                } else {
+                    // Show confirmed thread with ability to switch
+                    container.appendChild(createConfirmedThreadUI());
                 }
-            });
+            }
 
             outputSection.style.display = 'block';
         }
 
-        function getSelectedTweet(index) {
-            return tweetVariants[index][selectedVariants[index]];
+        function createThreadSelectionUI() {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'thread-selection';
+
+            // Check if variants are different
+            const threadsAreDifferent = tweetVariants.some(([a, b]) => a !== b);
+
+            if (!threadsAreDifferent) {
+                // If all variants are the same, skip selection and show directly
+                threadConfirmed = true;
+                return createConfirmedThreadUI();
+            }
+
+            wrapper.innerHTML = `
+                <h3>Choose a thread version:</h3>
+                <div class="thread-options">
+                    ${createThreadOptionHTML(0, 'Thread A')}
+                    ${createThreadOptionHTML(1, 'Thread B')}
+                </div>
+            `;
+
+            return wrapper;
         }
 
-        function createTweetCard(variants, index, total) {
+        function createThreadOptionHTML(threadIndex, label) {
+            const tweets = tweetVariants.map(v => v[threadIndex]);
+            const totalChars = tweets.reduce((sum, t) => sum + t.length, 0);
+            const isSelected = selectedThread === threadIndex;
+
+            const previewTweets = tweets.map((tweet, i) => `
+                <div class="thread-preview-tweet">
+                    <div class="thread-preview-number">Tweet ${i + 1} of ${tweets.length} · ${tweet.length}/${TWEET_MAX_LENGTH}</div>
+                    ${escapeHtml(tweet)}
+                </div>
+            `).join('');
+
+            return `
+                <div class="thread-option ${isSelected ? 'selected' : ''}" onclick="selectThread(${threadIndex})">
+                    <div class="thread-option-header">
+                        <span class="thread-option-label">${label}</span>
+                        <span class="thread-option-stats">${tweets.length} tweets · ${totalChars} total chars</span>
+                    </div>
+                    <div class="thread-preview">
+                        ${previewTweets}
+                    </div>
+                </div>
+            `;
+        }
+
+        function selectThread(threadIndex) {
+            selectedThread = threadIndex;
+            threadConfirmed = true;
+            displayTweets();
+        }
+
+        function createConfirmedThreadUI() {
+            const wrapper = document.createElement('div');
+
+            // Check if there were different options to choose from
+            const threadsAreDifferent = tweetVariants.some(([a, b]) => a !== b);
+
+            if (threadsAreDifferent) {
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'selected-thread-header';
+                headerDiv.innerHTML = `
+                    <span class="selected-thread-label">Using Thread ${selectedThread === 0 ? 'A' : 'B'}</span>
+                    <button class="switch-thread-btn" onclick="showThreadSelection()">Switch Thread</button>
+                `;
+                wrapper.appendChild(headerDiv);
+            }
+
+            // Show individual tweets from selected thread
+            tweetVariants.forEach((variants, index) => {
+                const card = createThreadTweetCard(variants[selectedThread], index, tweetVariants.length);
+                wrapper.appendChild(card);
+
+                if (index < tweetVariants.length - 1) {
+                    const connector = document.createElement('div');
+                    connector.className = 'thread-indicator';
+                    connector.textContent = '│';
+                    wrapper.appendChild(connector);
+                }
+            });
+
+            return wrapper;
+        }
+
+        function showThreadSelection() {
+            threadConfirmed = false;
+            displayTweets();
+        }
+
+        function createSingleTweetCard(variants, index) {
+            // For single tweets, show variant options like before
             const card = document.createElement('div');
             card.className = 'tweet-card';
             card.dataset.index = index;
 
             const [variantA, variantB] = variants;
-            const selectedIdx = selectedVariants[index];
-            const selectedTweet = variants[selectedIdx];
+            const selectedTweet = variants[selectedThread];
             const charCount = selectedTweet.length;
             const isOverLimit = charCount > TWEET_MAX_LENGTH;
 
-            // Check if variants are different
             const variantsAreDifferent = variantA !== variantB;
 
             let variantHtml = '';
             if (variantsAreDifferent) {
                 variantHtml = `
                     <div class="variant-container">
-                        <div class="variant-option ${selectedIdx === 0 ? 'selected' : ''}" onclick="selectVariant(${index}, 0)">
+                        <div class="variant-option ${selectedThread === 0 ? 'selected' : ''}" onclick="selectSingleTweetVariant(0)">
                             <div class="variant-label">
                                 <span class="label">Option A</span>
                                 <span>${variantA.length}/${TWEET_MAX_LENGTH}</span>
                             </div>
                             <div class="variant-text">${escapeHtml(variantA)}</div>
                         </div>
-                        <div class="variant-option ${selectedIdx === 1 ? 'selected' : ''}" onclick="selectVariant(${index}, 1)">
+                        <div class="variant-option ${selectedThread === 1 ? 'selected' : ''}" onclick="selectSingleTweetVariant(1)">
                             <div class="variant-label">
                                 <span class="label">Option B</span>
                                 <span>${variantB.length}/${TWEET_MAX_LENGTH}</span>
@@ -943,7 +1134,7 @@ Do not include any other text, just the JSON array.`;
 
             card.innerHTML = `
                 <div class="tweet-header">
-                    <span class="tweet-number">${total > 1 ? `Tweet ${index + 1} of ${total}` : 'Tweet'}${variantsAreDifferent ? ' - Choose a version' : ''}</span>
+                    <span class="tweet-number">${variantsAreDifferent ? 'Choose a version' : 'Tweet'}</span>
                     <span class="char-count ${isOverLimit ? 'warning' : ''}">${charCount}/${TWEET_MAX_LENGTH}</span>
                 </div>
                 ${variantHtml}
@@ -957,9 +1148,37 @@ Do not include any other text, just the JSON array.`;
             return card;
         }
 
-        function selectVariant(tweetIndex, variantIndex) {
-            selectedVariants[tweetIndex] = variantIndex;
+        function selectSingleTweetVariant(variantIndex) {
+            selectedThread = variantIndex;
             displayTweets();
+        }
+
+        function createThreadTweetCard(tweet, index, total) {
+            const card = document.createElement('div');
+            card.className = 'tweet-card';
+            card.dataset.index = index;
+
+            const charCount = tweet.length;
+            const isOverLimit = charCount > TWEET_MAX_LENGTH;
+
+            card.innerHTML = `
+                <div class="tweet-header">
+                    <span class="tweet-number">Tweet ${index + 1} of ${total}</span>
+                    <span class="char-count ${isOverLimit ? 'warning' : ''}">${charCount}/${TWEET_MAX_LENGTH}</span>
+                </div>
+                <div class="tweet-content" id="tweet-content-${index}">${escapeHtml(tweet)}</div>
+                <div class="tweet-actions">
+                    <button class="btn-post" onclick="postTweet(${index})">Post</button>
+                    <button class="btn-copy" onclick="copyTweet(${index})">Copy</button>
+                    <button class="btn-edit" onclick="editTweet(${index})">Edit</button>
+                </div>
+            `;
+
+            return card;
+        }
+
+        function getSelectedTweet(index) {
+            return tweetVariants[index][selectedThread];
         }
 
         function escapeHtml(text) {
@@ -1057,9 +1276,8 @@ Do not include any other text, just the JSON array.`;
             const newText = textarea.value.trim();
 
             if (newText) {
-                // Update both variants to the edited text (user's custom version)
-                tweetVariants[index] = [newText, newText];
-                selectedVariants[index] = 0;
+                // Update the currently selected thread's variant
+                tweetVariants[index][selectedThread] = newText;
                 displayTweets();
             }
         }
