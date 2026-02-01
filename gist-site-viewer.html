@@ -5,176 +5,349 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="View and browse all public HTML gists from a GitHub user with preview links">
     <title>Gist Site Viewer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-primary: #0a0a0b;
+            --bg-card: #131316;
+            --bg-card-hover: #1a1a1f;
+            --text-primary: #e8e6e3;
+            --text-secondary: #8a8a8d;
+            --text-muted: #5c5c5f;
+            --accent: #c9a962;
+            --accent-dim: #8a7543;
+            --border: #2a2a2f;
+            --border-subtle: #1f1f24;
+        }
+
         * {
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            max-width: 800px;
+            font-family: 'Cormorant Garamond', Georgia, serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 720px;
             margin: 0 auto;
-            padding: 20px;
-            background: #f5f5f5;
-            color: #333;
+            padding: 80px 24px 60px;
+        }
+
+        header {
+            margin-bottom: 60px;
+            text-align: center;
         }
 
         h1 {
-            margin-bottom: 10px;
+            font-size: 3.2rem;
+            font-weight: 400;
+            letter-spacing: -0.02em;
+            margin-bottom: 12px;
+            color: var(--text-primary);
         }
 
-        .description {
-            color: #666;
-            margin-bottom: 20px;
+        .tagline {
+            font-size: 1.15rem;
+            font-style: italic;
+            color: var(--text-secondary);
+            letter-spacing: 0.01em;
         }
 
-        .controls {
+        .search-section {
+            margin-bottom: 48px;
+        }
+
+        .search-box {
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
+            gap: 12px;
+            align-items: stretch;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            position: relative;
+        }
+
+        .input-wrapper::before {
+            content: '@';
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text-muted);
         }
 
         input[type="text"] {
-            flex: 1;
-            min-width: 200px;
-            padding: 10px 14px;
-            font-size: 16px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
+            width: 100%;
+            padding: 14px 16px 14px 36px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.95rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent-dim);
+            background: var(--bg-card-hover);
+        }
+
+        input[type="text"]::placeholder {
+            color: var(--text-muted);
         }
 
         button {
-            padding: 10px 20px;
-            font-size: 16px;
-            background: #0366d6;
-            color: white;
-            border: none;
-            border-radius: 6px;
+            padding: 14px 28px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            background: transparent;
+            border: 1px solid var(--accent);
+            color: var(--accent);
             cursor: pointer;
+            transition: all 0.25s ease;
         }
 
-        button:hover {
-            background: #0256b9;
+        button:hover:not(:disabled) {
+            background: var(--accent);
+            color: var(--bg-primary);
         }
 
         button:disabled {
-            background: #ccc;
+            opacity: 0.4;
             cursor: not-allowed;
         }
 
         .status {
-            padding: 10px;
-            margin-bottom: 20px;
-            border-radius: 6px;
+            padding: 16px 20px;
+            margin-bottom: 32px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
             display: none;
+            border-left: 2px solid;
         }
 
         .status.loading {
             display: block;
-            background: #e3f2fd;
-            color: #1565c0;
+            background: rgba(201, 169, 98, 0.08);
+            border-color: var(--accent-dim);
+            color: var(--accent);
         }
 
         .status.error {
             display: block;
-            background: #ffebee;
-            color: #c62828;
+            background: rgba(198, 86, 86, 0.08);
+            border-color: #c65656;
+            color: #e88a8a;
+        }
+
+        .count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-subtle);
         }
 
         .gist-list {
             list-style: none;
-            padding: 0;
-            margin: 0;
         }
 
         .gist-item {
-            background: white;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 12px;
+            padding: 28px 0;
+            border-bottom: 1px solid var(--border-subtle);
+            animation: fadeIn 0.4s ease both;
         }
 
-        .gist-item a {
-            color: #0366d6;
+        .gist-item:last-child {
+            border-bottom: none;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .gist-item:nth-child(1) { animation-delay: 0.05s; }
+        .gist-item:nth-child(2) { animation-delay: 0.1s; }
+        .gist-item:nth-child(3) { animation-delay: 0.15s; }
+        .gist-item:nth-child(4) { animation-delay: 0.2s; }
+        .gist-item:nth-child(5) { animation-delay: 0.25s; }
+        .gist-item:nth-child(n+6) { animation-delay: 0.3s; }
+
+        .gist-title {
+            font-size: 1.4rem;
+            font-weight: 400;
+            line-height: 1.4;
+            color: var(--text-primary);
             text-decoration: none;
-            font-size: 18px;
-            font-weight: 500;
+            display: inline-block;
+            transition: color 0.2s ease;
         }
 
-        .gist-item a:hover {
-            text-decoration: underline;
+        .gist-title:hover {
+            color: var(--accent);
         }
 
         .gist-meta {
-            margin-top: 8px;
-            font-size: 13px;
-            color: #666;
+            margin-top: 10px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
         }
 
-        .gist-meta span {
-            margin-right: 16px;
+        .gist-date {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            letter-spacing: 0.02em;
         }
 
-        .gist-meta a {
-            font-size: 13px;
-            font-weight: normal;
+        .gist-link {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .gist-link:hover {
+            color: var(--accent);
         }
 
         .file-list {
-            margin-top: 10px;
+            margin-top: 16px;
             padding-left: 20px;
+            list-style: none;
+            border-left: 1px solid var(--border-subtle);
         }
 
         .file-list li {
-            margin: 6px 0;
+            padding: 8px 0 8px 16px;
         }
 
         .file-list a {
-            font-size: 14px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .file-list a:hover {
+            color: var(--accent);
+        }
+
+        .file-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            background: var(--bg-card);
+            padding: 3px 8px;
+            margin-left: 8px;
+            vertical-align: middle;
         }
 
         .empty-state {
             text-align: center;
-            padding: 40px;
-            color: #666;
-        }
-
-        .count {
-            color: #666;
-            margin-bottom: 16px;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+            font-style: italic;
         }
 
         footer {
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
-            font-size: 13px;
-            color: #666;
+            margin-top: 80px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-subtle);
+            text-align: center;
         }
 
         footer a {
-            color: #0366d6;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-decoration: none;
+            letter-spacing: 0.05em;
+            transition: color 0.2s ease;
+        }
+
+        footer a:hover {
+            color: var(--accent);
+        }
+
+        @media (max-width: 540px) {
+            .container {
+                padding: 48px 16px 40px;
+            }
+
+            h1 {
+                font-size: 2.4rem;
+            }
+
+            .search-box {
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+            }
+
+            .gist-meta {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 6px;
+            }
         }
     </style>
 </head>
 <body>
-    <h1>Gist Site Viewer</h1>
-    <p class="description">Browse public HTML gists from any GitHub user with live preview links.</p>
+    <div class="container">
+        <header>
+            <h1>Gist Site Viewer</h1>
+            <p class="tagline">Browse public HTML gists with live preview links</p>
+        </header>
 
-    <div class="controls">
-        <input type="text" id="username" placeholder="GitHub username" value="ZainRizvi">
-        <button id="fetchBtn">Fetch Gists</button>
+        <section class="search-section">
+            <div class="search-box">
+                <div class="input-wrapper">
+                    <input type="text" id="username" placeholder="username" value="ZainRizvi" aria-label="GitHub username">
+                </div>
+                <button id="fetchBtn">Fetch</button>
+            </div>
+        </section>
+
+        <div id="status" class="status"></div>
+
+        <main id="results"></main>
+
+        <footer>
+            <a href="https://github.com/ZainRizvi/HtmlTools/blob/main/gist-site-viewer.html">View source on GitHub</a>
+        </footer>
     </div>
-
-    <div id="status" class="status"></div>
-
-    <div id="results"></div>
-
-    <footer>
-        <a href="https://github.com/ZainRizvi/HtmlTools/blob/main/gist-site-viewer.html">View source on GitHub</a>
-    </footer>
 
     <script>
         const usernameInput = document.getElementById('username');
@@ -182,7 +355,6 @@
         const statusDiv = document.getElementById('status');
         const resultsDiv = document.getElementById('results');
 
-        // Load username from URL or localStorage
         function init() {
             const params = new URLSearchParams(window.location.search);
             const urlUsername = params.get('user');
@@ -195,7 +367,6 @@
                 }
             }
 
-            // Auto-fetch if username is present
             if (usernameInput.value.trim()) {
                 fetchGists();
             }
@@ -211,7 +382,6 @@
         }
 
         function buildPreviewUrl(gist, filename) {
-            // Get the raw URL for the specific file
             const file = gist.files[filename];
             if (!file || !file.raw_url) return null;
             return 'https://htmlpreview.github.io/?' + file.raw_url;
@@ -224,20 +394,17 @@
                 return;
             }
 
-            // Save username
             localStorage.setItem('gist-viewer-username', username);
 
-            // Update URL
             const url = new URL(window.location);
             url.searchParams.set('user', username);
             window.history.replaceState({}, '', url);
 
             fetchBtn.disabled = true;
             showStatus('Fetching gists...', 'loading');
-            resultsDiv.innerHTML = '';
+            resultsDiv.replaceChildren();
 
             try {
-                // Fetch all pages of gists
                 let allGists = [];
                 let page = 1;
                 const perPage = 100;
@@ -262,14 +429,12 @@
                     page++;
                 }
 
-                // Filter to gists that have at least one HTML file
                 const htmlGists = allGists.filter(gist => {
                     return Object.keys(gist.files).some(filename =>
                         filename.toLowerCase().endsWith('.html')
                     );
                 });
 
-                // Sort by created_at descending (newest first)
                 htmlGists.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
                 hideStatus();
@@ -297,7 +462,7 @@
 
             const countDiv = document.createElement('p');
             countDiv.className = 'count';
-            countDiv.textContent = `Found ${gists.length} gist${gists.length === 1 ? '' : 's'} with HTML files`;
+            countDiv.textContent = `${gists.length} gist${gists.length === 1 ? '' : 's'} with HTML files`;
             resultsDiv.appendChild(countDiv);
 
             const list = document.createElement('ul');
@@ -311,16 +476,15 @@
                 const item = document.createElement('li');
                 item.className = 'gist-item';
 
-                // Use gist description as title, fallback to first HTML filename
                 const title = gist.description || htmlFiles[0] || 'Untitled Gist';
 
-                // If there's only one HTML file, link directly to it
                 if (htmlFiles.length === 1) {
                     const previewUrl = buildPreviewUrl(gist, htmlFiles[0]);
 
                     const mainLink = document.createElement('a');
                     mainLink.href = previewUrl;
                     mainLink.target = '_blank';
+                    mainLink.className = 'gist-title';
                     mainLink.textContent = title;
                     item.appendChild(mainLink);
 
@@ -328,36 +492,38 @@
                     meta.className = 'gist-meta';
 
                     const dateSpan = document.createElement('span');
-                    dateSpan.textContent = 'Created: ' + formatDate(gist.created_at);
+                    dateSpan.className = 'gist-date';
+                    dateSpan.textContent = formatDate(gist.created_at);
                     meta.appendChild(dateSpan);
 
-                    const githubSpan = document.createElement('span');
                     const githubLink = document.createElement('a');
                     githubLink.href = gist.html_url;
                     githubLink.target = '_blank';
-                    githubLink.textContent = 'View on GitHub';
-                    githubSpan.appendChild(githubLink);
-                    meta.appendChild(githubSpan);
+                    githubLink.className = 'gist-link';
+                    githubLink.textContent = 'view source';
+                    meta.appendChild(githubLink);
 
                     item.appendChild(meta);
                 } else {
-                    // Multiple HTML files - show them as a sublist
                     const mainLink = document.createElement('a');
                     mainLink.href = gist.html_url;
                     mainLink.target = '_blank';
+                    mainLink.className = 'gist-title';
                     mainLink.textContent = title;
                     item.appendChild(mainLink);
+
+                    const fileCountBadge = document.createElement('span');
+                    fileCountBadge.className = 'file-count';
+                    fileCountBadge.textContent = `${htmlFiles.length} files`;
+                    mainLink.after(fileCountBadge);
 
                     const meta = document.createElement('div');
                     meta.className = 'gist-meta';
 
                     const dateSpan = document.createElement('span');
-                    dateSpan.textContent = 'Created: ' + formatDate(gist.created_at);
+                    dateSpan.className = 'gist-date';
+                    dateSpan.textContent = formatDate(gist.created_at);
                     meta.appendChild(dateSpan);
-
-                    const countSpan = document.createElement('span');
-                    countSpan.textContent = `${htmlFiles.length} HTML files`;
-                    meta.appendChild(countSpan);
 
                     item.appendChild(meta);
 
@@ -393,7 +559,6 @@
             });
         }
 
-        // Event listeners
         fetchBtn.addEventListener('click', fetchGists);
         usernameInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -401,7 +566,6 @@
             }
         });
 
-        // Initialize
         init();
     </script>
 </body>
