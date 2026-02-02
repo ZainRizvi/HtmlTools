@@ -384,7 +384,9 @@
         function buildPreviewUrl(gist, filename) {
             const file = gist.files[filename];
             if (!file || !file.raw_url) return null;
-            return 'https://htmlpreview.github.io/?' + file.raw_url;
+            // Use gist-renderer for proper title display in link previews
+            const rendererBase = window.location.origin + window.location.pathname.replace(/[^/]*$/, 'gist-renderer');
+            return rendererBase + '?' + file.raw_url;
         }
 
         async function fetchGists() {
