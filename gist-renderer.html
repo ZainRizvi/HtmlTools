@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Render HTML gists with proper title and Open Graph metadata for link previews">
+    <title>Loading...</title>
+    <!-- Dynamic OG tags will be set by JavaScript for client-side rendering -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Loading...">
+    <meta property="og:description" content="">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Loading...">
+    <!-- DOMPurify for sanitizing HTML content -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js" integrity="sha512-H+rglffZ6f5gF7UJgvH4Naa+fGCgjrHKMgoFOGmcPTRwR6oILo5R+gtzNrpDp7iMV3udbymBVjkeZGNz1Em4rQ==" crossorigin="anonymous"></script>
+    <style id="renderer-styles">
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0b;
+            color: #e8e6e3;
+            min-height: 100vh;
+        }
+
+        .loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .loading-text {
+            font-size: 1.2rem;
+            color: #8a8a8d;
+            margin-bottom: 20px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #2a2a2f;
+            border-top-color: #c9a962;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .error-title {
+            font-size: 1.5rem;
+            color: #e88a8a;
+            margin-bottom: 16px;
+        }
+
+        .error-message {
+            font-size: 1rem;
+            color: #8a8a8d;
+            max-width: 500px;
+            line-height: 1.6;
+        }
+
+        .error-url {
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: #5c5c5f;
+            margin-top: 20px;
+            word-break: break-all;
+            max-width: 600px;
+        }
+
+        .landing-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 80px 20px;
+            text-align: center;
+        }
+
+        .landing-title {
+            font-size: 2.5rem;
+            font-weight: 300;
+            margin-bottom: 16px;
+        }
+
+        .landing-description {
+            font-size: 1.1rem;
+            color: #8a8a8d;
+            margin-bottom: 40px;
+            line-height: 1.6;
+        }
+
+        .landing-usage {
+            background: #131316;
+            border: 1px solid #2a2a2f;
+            padding: 24px;
+            text-align: left;
+        }
+
+        .landing-usage h2 {
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #c9a962;
+            margin-bottom: 16px;
+        }
+
+        .landing-usage code {
+            display: block;
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #e8e6e3;
+            background: #0a0a0b;
+            padding: 12px;
+            margin-top: 8px;
+            word-break: break-all;
+        }
+
+        .landing-usage p {
+            color: #8a8a8d;
+            font-size: 0.95rem;
+            margin-bottom: 12px;
+        }
+
+        .landing-footer {
+            margin-top: 60px;
+        }
+
+        .landing-footer a {
+            font-size: 0.85rem;
+            color: #5c5c5f;
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .landing-footer a:hover {
+            color: #c9a962;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Initial loading state -->
+        <div class="loading-container" id="loading">
+            <div class="spinner"></div>
+            <p class="loading-text">Loading content...</p>
+        </div>
+    </div>
+
+    <script>
+        (async function() {
+            const app = document.getElementById('app');
+            const params = new URLSearchParams(window.location.search);
+
+            // Get URL from query parameter - support both ?url= and bare ?<url>
+            let targetUrl = params.get('url');
+            if (!targetUrl) {
+                // Check if URL is passed as the first parameter without key
+                const queryString = window.location.search.slice(1);
+                if (queryString && (queryString.startsWith('http://') || queryString.startsWith('https://'))) {
+                    targetUrl = queryString.split('&')[0];
+                }
+            }
+
+            // No URL provided - show landing page
+            if (!targetUrl) {
+                showLanding();
+                return;
+            }
+
+            // Validate URL
+            let url;
+            try {
+                url = new URL(targetUrl);
+            } catch (e) {
+                showError('Invalid URL', 'The provided URL is not valid.', targetUrl);
+                return;
+            }
+
+            // Security: Only allow certain domains
+            const allowedDomains = [
+                'gist.githubusercontent.com',
+                'raw.githubusercontent.com',
+                'githubusercontent.com'
+            ];
+
+            const isAllowed = allowedDomains.some(domain =>
+                url.hostname === domain || url.hostname.endsWith('.' + domain)
+            );
+
+            if (!isAllowed) {
+                showError(
+                    'Domain Not Allowed',
+                    'For security reasons, only GitHub raw content URLs are supported.',
+                    targetUrl
+                );
+                return;
+            }
+
+            try {
+                const response = await fetch(targetUrl);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const html = await response.text();
+                renderContent(html, targetUrl);
+
+            } catch (error) {
+                showError('Failed to Load', error.message, targetUrl);
+            }
+
+            function showLanding() {
+                document.title = 'Gist Renderer';
+                const currentHost = window.location.origin + window.location.pathname;
+
+                app.replaceChildren();
+
+                const container = document.createElement('div');
+                container.className = 'landing-container';
+
+                const h1 = document.createElement('h1');
+                h1.className = 'landing-title';
+                h1.textContent = 'Gist Renderer';
+                container.appendChild(h1);
+
+                const desc = document.createElement('p');
+                desc.className = 'landing-description';
+                desc.textContent = 'Render HTML files from GitHub Gists with proper page titles and Open Graph metadata for beautiful link previews.';
+                container.appendChild(desc);
+
+                const usage = document.createElement('div');
+                usage.className = 'landing-usage';
+
+                const h2 = document.createElement('h2');
+                h2.textContent = 'Usage';
+                usage.appendChild(h2);
+
+                const p = document.createElement('p');
+                p.textContent = 'Append a raw GitHub/Gist URL as a query parameter:';
+                usage.appendChild(p);
+
+                const code = document.createElement('code');
+                code.textContent = currentHost + '?https://gist.githubusercontent.com/...';
+                usage.appendChild(code);
+
+                container.appendChild(usage);
+
+                const footer = document.createElement('div');
+                footer.className = 'landing-footer';
+                const footerLink = document.createElement('a');
+                footerLink.href = 'https://github.com/ZainRizvi/HtmlTools/blob/main/gist-renderer.html';
+                footerLink.textContent = 'View source on GitHub';
+                footer.appendChild(footerLink);
+                container.appendChild(footer);
+
+                app.appendChild(container);
+            }
+
+            function showError(title, message, url) {
+                document.title = 'Error - Gist Renderer';
+                app.replaceChildren();
+
+                const container = document.createElement('div');
+                container.className = 'error-container';
+
+                const h1 = document.createElement('h1');
+                h1.className = 'error-title';
+                h1.textContent = title;
+                container.appendChild(h1);
+
+                const msg = document.createElement('p');
+                msg.className = 'error-message';
+                msg.textContent = message;
+                container.appendChild(msg);
+
+                if (url) {
+                    const urlEl = document.createElement('p');
+                    urlEl.className = 'error-url';
+                    urlEl.textContent = url;
+                    container.appendChild(urlEl);
+                }
+
+                app.appendChild(container);
+            }
+
+            function renderContent(html, sourceUrl) {
+                // Parse the HTML to extract title and other metadata
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+
+                // Extract title from the content
+                const titleElement = doc.querySelector('title');
+                const pageTitle = titleElement ? titleElement.textContent.trim() : 'Untitled';
+
+                // Extract description if available
+                const descMeta = doc.querySelector('meta[name="description"]');
+                const pageDescription = descMeta ? descMeta.getAttribute('content') : '';
+
+                // Update our document's title and meta tags
+                document.title = pageTitle;
+
+                // Update OG tags
+                updateMeta('og:title', pageTitle);
+                updateMeta('og:description', pageDescription);
+                updateMeta('og:url', window.location.href);
+                updateMeta('twitter:title', pageTitle);
+                updateMeta('twitter:description', pageDescription);
+
+                // Process the HTML content
+                // We need to handle relative URLs and make them work
+                const baseUrl = sourceUrl.substring(0, sourceUrl.lastIndexOf('/') + 1);
+
+                // Rewrite relative URLs in the content
+                rewriteUrls(doc, baseUrl);
+
+                // Remove our loader styles
+                const rendererStyles = document.getElementById('renderer-styles');
+                if (rendererStyles) {
+                    rendererStyles.remove();
+                }
+
+                // Clear the app container
+                app.remove();
+
+                // Copy head content (styles, meta tags, etc.) from fetched document
+                const fetchedHead = doc.head;
+                if (fetchedHead) {
+                    // Copy stylesheets and style tags
+                    fetchedHead.querySelectorAll('link[rel="stylesheet"], style').forEach(el => {
+                        document.head.appendChild(el.cloneNode(true));
+                    });
+
+                    // Copy other relevant head elements (fonts, etc.)
+                    fetchedHead.querySelectorAll('link[rel="preconnect"], link[rel="preload"]').forEach(el => {
+                        document.head.appendChild(el.cloneNode(true));
+                    });
+                }
+
+                // Replace body content with fetched content
+                // Note: This is intentional HTML rendering functionality (like htmlpreview.github.io)
+                // We've restricted to GitHub domains only and use DOMPurify for safety
+                const fetchedBody = doc.body;
+                if (fetchedBody) {
+                    // Copy body attributes (class, id, style, etc.)
+                    Array.from(fetchedBody.attributes).forEach(attr => {
+                        document.body.setAttribute(attr.name, attr.value);
+                    });
+
+                    // Configure DOMPurify to allow styles and most HTML but sanitize dangerous elements
+                    const purifyConfig = {
+                        ADD_TAGS: ['style'],
+                        ADD_ATTR: ['target']
+                    };
+
+                    // Sanitize and set body content
+                    const cleanHtml = DOMPurify.sanitize(fetchedBody.innerHTML, purifyConfig);
+                    document.body.replaceChildren();
+
+                    // Parse the sanitized HTML and append to body
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = cleanHtml;
+                    while (tempDiv.firstChild) {
+                        document.body.appendChild(tempDiv.firstChild);
+                    }
+
+                    // Execute scripts from the fetched content
+                    // Re-create script elements so they execute
+                    const scripts = document.body.querySelectorAll('script');
+                    scripts.forEach(oldScript => {
+                        const newScript = document.createElement('script');
+
+                        // Copy attributes
+                        Array.from(oldScript.attributes).forEach(attr => {
+                            newScript.setAttribute(attr.name, attr.value);
+                        });
+
+                        // Copy inline script content
+                        if (oldScript.textContent) {
+                            newScript.textContent = oldScript.textContent;
+                        }
+
+                        oldScript.parentNode.replaceChild(newScript, oldScript);
+                    });
+                }
+            }
+
+            function updateMeta(property, content) {
+                // Try property attribute first (for OG tags)
+                let meta = document.querySelector(`meta[property="${property}"]`);
+                if (!meta) {
+                    // Try name attribute (for twitter tags)
+                    meta = document.querySelector(`meta[name="${property}"]`);
+                }
+                if (meta) {
+                    meta.setAttribute('content', content);
+                }
+            }
+
+            function rewriteUrls(doc, baseUrl) {
+                // Rewrite href attributes
+                doc.querySelectorAll('[href]').forEach(el => {
+                    const href = el.getAttribute('href');
+                    if (href && !isAbsoluteUrl(href) && !href.startsWith('#') && !href.startsWith('javascript:')) {
+                        el.setAttribute('href', new URL(href, baseUrl).href);
+                    }
+                });
+
+                // Rewrite src attributes
+                doc.querySelectorAll('[src]').forEach(el => {
+                    const src = el.getAttribute('src');
+                    if (src && !isAbsoluteUrl(src) && !src.startsWith('data:')) {
+                        el.setAttribute('src', new URL(src, baseUrl).href);
+                    }
+                });
+
+                // Rewrite srcset attributes
+                doc.querySelectorAll('[srcset]').forEach(el => {
+                    const srcset = el.getAttribute('srcset');
+                    if (srcset) {
+                        const newSrcset = srcset.split(',').map(part => {
+                            const [url, descriptor] = part.trim().split(/\s+/);
+                            if (!isAbsoluteUrl(url)) {
+                                return new URL(url, baseUrl).href + (descriptor ? ' ' + descriptor : '');
+                            }
+                            return part.trim();
+                        }).join(', ');
+                        el.setAttribute('srcset', newSrcset);
+                    }
+                });
+
+                // Rewrite url() in inline styles
+                doc.querySelectorAll('[style]').forEach(el => {
+                    const style = el.getAttribute('style');
+                    if (style && style.includes('url(')) {
+                        const newStyle = style.replace(/url\(['"]?([^'")]+)['"]?\)/g, (match, url) => {
+                            if (!isAbsoluteUrl(url) && !url.startsWith('data:')) {
+                                return `url('${new URL(url, baseUrl).href}')`;
+                            }
+                            return match;
+                        });
+                        el.setAttribute('style', newStyle);
+                    }
+                });
+
+                // Rewrite urls in style tags
+                doc.querySelectorAll('style').forEach(styleEl => {
+                    if (styleEl.textContent.includes('url(')) {
+                        styleEl.textContent = styleEl.textContent.replace(
+                            /url\(['"]?([^'")]+)['"]?\)/g,
+                            (match, url) => {
+                                if (!isAbsoluteUrl(url) && !url.startsWith('data:')) {
+                                    return `url('${new URL(url, baseUrl).href}')`;
+                                }
+                                return match;
+                            }
+                        );
+                    }
+                });
+            }
+
+            function isAbsoluteUrl(url) {
+                return /^(https?:)?\/\//i.test(url);
+            }
+        })();
+    </script>
+</body>
+</html>
