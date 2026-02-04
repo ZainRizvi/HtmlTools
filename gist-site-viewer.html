@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="View and browse all public HTML gists from a GitHub user with preview links">
+    <meta name="description" content="View and browse all public HTML and Markdown gists from a GitHub user with preview links">
     <title>Gist Site Viewer</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -328,7 +328,7 @@
     <div class="container">
         <header>
             <h1>Gist Site Viewer</h1>
-            <p class="tagline">Browse public HTML gists with live preview links</p>
+            <p class="tagline">Browse public HTML and Markdown gists with live preview links</p>
         </header>
 
         <section class="search-section">
@@ -384,9 +384,10 @@
         function buildPreviewUrl(gist, filename) {
             const file = gist.files[filename];
             if (!file || !file.raw_url) return null;
-            // Use gist-renderer for proper title display in link previews
-            const rendererBase = window.location.origin + window.location.pathname.replace(/[^/]*$/, 'gist-renderer');
-            return rendererBase + '?' + file.raw_url;
+            const basePath = window.location.origin + window.location.pathname.replace(/[^/]*$/, '');
+            // Use markdown-renderer for .md files, gist-renderer for .html
+            const renderer = filename.toLowerCase().endsWith('.md') ? 'markdown-renderer' : 'gist-renderer';
+            return basePath + renderer + '.html?' + file.raw_url;
         }
 
         async function fetchGists() {
@@ -432,9 +433,10 @@
                 }
 
                 const htmlGists = allGists.filter(gist => {
-                    return Object.keys(gist.files).some(filename =>
-                        filename.toLowerCase().endsWith('.html')
-                    );
+                    return Object.keys(gist.files).some(filename => {
+                        const lower = filename.toLowerCase();
+                        return lower.endsWith('.html') || lower.endsWith('.md');
+                    });
                 });
 
                 htmlGists.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -456,7 +458,7 @@
                 const emptyDiv = document.createElement('div');
                 emptyDiv.className = 'empty-state';
                 const p = document.createElement('p');
-                p.textContent = `No public HTML gists found for ${username}.`;
+                p.textContent = `No public HTML or Markdown gists found for ${username}.`;
                 emptyDiv.appendChild(p);
                 resultsDiv.appendChild(emptyDiv);
                 return;
@@ -464,16 +466,17 @@
 
             const countDiv = document.createElement('p');
             countDiv.className = 'count';
-            countDiv.textContent = `${gists.length} gist${gists.length === 1 ? '' : 's'} with HTML files`;
+            countDiv.textContent = `${gists.length} gist${gists.length === 1 ? '' : 's'} with HTML/Markdown files`;
             resultsDiv.appendChild(countDiv);
 
             const list = document.createElement('ul');
             list.className = 'gist-list';
 
             for (const gist of gists) {
-                const htmlFiles = Object.keys(gist.files).filter(filename =>
-                    filename.toLowerCase().endsWith('.html')
-                );
+                const htmlFiles = Object.keys(gist.files).filter(filename => {
+                    const lower = filename.toLowerCase();
+                    return lower.endsWith('.html') || lower.endsWith('.md');
+                });
 
                 const item = document.createElement('li');
                 item.className = 'gist-item';
