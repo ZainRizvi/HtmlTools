@@ -83,6 +83,37 @@
             display: block;
         }
 
+        .opacity-control {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            width: 100%;
+        }
+
+        .opacity-control label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #444;
+            text-align: center;
+        }
+
+        .opacity-slider {
+            width: 100%;
+            height: 28px;
+            margin: 0;
+            accent-color: #22c55e;
+            cursor: pointer;
+        }
+
+        .control-btn svg {
+            width: 36px;
+            height: 36px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+        }
+
         .button-divider {
             width: 100%;
             height: 2px;
@@ -263,6 +294,7 @@
             let brushState = {
                 color: '#FF1493',      // Hot pink
                 size: 85,              // Middle of 20-150 range
+                opacity: 0.55,         // Master opacity (20%-100%)
                 isDrawing: false
             };
 
@@ -304,10 +336,11 @@
              * @param {string} color - Color to use (hex)
              * @param {number} size - Brush diameter in pixels
              */
-            function drawBrushStrokeOnCtx(targetCtx, x, y, color, size) {
+            function drawBrushStrokeOnCtx(targetCtx, x, y, color, size, opacity) {
                 targetCtx.save();
                 const radius = size / 2;
                 const { r, g, b } = hexToRgb(color);
+                const alpha = opacity ?? brushState.opacity;
 
                 const gradient = targetCtx.createRadialGradient(
                     x - radius * 0.12,
@@ -317,8 +350,8 @@
                     y,
                     radius
                 );
-                gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.72)`);
-                gradient.addColorStop(0.55, `rgba(${r}, ${g}, ${b}, 0.5)`);
+                gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${alpha})`);
+                gradient.addColorStop(0.55, `rgba(${r}, ${g}, ${b}, ${alpha * 0.69})`);
                 gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
 
                 targetCtx.fillStyle = gradient;
@@ -330,7 +363,7 @@
             }
 
             function drawBrushStroke(x, y, color, size) {
-                drawBrushStrokeOnCtx(ctx, x, y, color, size);
+                drawBrushStrokeOnCtx(ctx, x, y, color, size, brushState.opacity);
             }
 
             function getRandomColor() {
@@ -351,6 +384,12 @@
                     return brushState.size;
                 },
                 getSize: () => brushState.size,
+                setBrushOpacity(opacity) {
+                    const clamped = Math.max(0.2, Math.min(1, opacity));
+                    brushState.opacity = clamped;
+                    return brushState.opacity;
+                },
+                getOpacity: () => brushState.opacity,
                 increaseBrushSize() {
                     return this.setBrushSize(brushState.size + 15);
                 },
@@ -358,7 +397,8 @@
                     return this.setBrushSize(brushState.size - 15);
                 },
                 drawStroke: drawBrushStroke,
-                renderStrokeToContext: (targetCtx, x, y, color, size) => drawBrushStrokeOnCtx(targetCtx, x, y, color, size),
+                renderStrokeToContext: (targetCtx, x, y, color, size) =>
+                    drawBrushStrokeOnCtx(targetCtx, x, y, color, size, brushState.opacity),
                 getRandomColor,
                 getColors: () => [...COLORS]
             };
@@ -385,13 +425,19 @@
                 const dx = toX - fromX;
                 const dy = toY - fromY;
                 const distance = Math.sqrt(dx * dx + dy * dy);
-                const steps = Math.ceil(distance / 5); // Draw every 5px
+                const spacing = size * 0.55;
 
-                for (let i = 0; i <= steps; i++) {
-                    const t = steps === 0 ? 0 : i / steps;
-                    const x = fromX + dx * t;
-                    const y = fromY + dy * t;
-                    BrushEngine.drawStroke(x, y, color, size);
+                if (distance < spacing * 0.25) return;
+
+                const steps = Math.ceil(distance / spacing);
+                for (let i = 1; i <= steps; i++) {
+                    const t = i / steps;
+                    BrushEngine.drawStroke(
+                        fromX + dx * t,
+                        fromY + dy * t,
+                        color,
+                        size
+                    );
                 }
             }
 
@@ -574,10 +620,12 @@
                 return btn;
             }
 
-            function createControlButton(text, icon, callback) {
+            function createControlButton(options, callback) {
+                const { ariaLabel, svgMarkup } = options;
                 const btn = document.createElement('button');
                 btn.className = 'control-btn';
-                btn.textContent = text;
+                btn.innerHTML = svgMarkup;
+                btn.setAttribute('aria-label', ariaLabel);
                 btn.style.borderRadius = '8px';
                 btn.style.border = 'none';
                 btn.style.cursor = 'pointer';
@@ -585,6 +633,9 @@
                 btn.style.color = 'white';
                 btn.style.fontWeight = 'bold';
                 btn.style.fontSize = '18px';
+                btn.style.display = 'flex';
+                btn.style.alignItems = 'center';
+                btn.style.justifyContent = 'center';
 
                 btn.addEventListener('click', callback);
                 btn.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -592,6 +643,9 @@
 
                 return btn;
             }
+
+            const BRUSH_SMALLER_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/></svg>`;
+            const BRUSH_BIGGER_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/></svg>`;
 
             function selectColor(color, buttonElement) {
                 // Remove selection from previous button
@@ -671,10 +725,13 @@
                 controlGroup.className = 'button-group control-group';
                 controlGroup.style.gap = '4px';
 
-                const biggerBtn = createControlButton('+', '➕', () => {
-                    BrushEngine.increaseBrushSize();
-                    window.dispatchEvent(new CustomEvent('brush-size-changed'));
-                });
+                const biggerBtn = createControlButton(
+                    { ariaLabel: 'Bigger brush', svgMarkup: BRUSH_BIGGER_ICON },
+                    () => {
+                        BrushEngine.increaseBrushSize();
+                        window.dispatchEvent(new CustomEvent('brush-size-changed'));
+                    }
+                );
                 biggerBtn.style.backgroundColor = '#22c55e';
                 biggerBtn.style.width = buttonSize + 'px';
                 biggerBtn.style.height = buttonSize + 'px';
@@ -682,11 +739,13 @@
                 biggerBtn.style.minHeight = buttonSize + 'px';
                 controlGroup.appendChild(biggerBtn);
 
-                // Smaller button
-                const smallerBtn = createControlButton('−', '➖', () => {
-                    BrushEngine.decreaseBrushSize();
-                    window.dispatchEvent(new CustomEvent('brush-size-changed'));
-                });
+                const smallerBtn = createControlButton(
+                    { ariaLabel: 'Smaller brush', svgMarkup: BRUSH_SMALLER_ICON },
+                    () => {
+                        BrushEngine.decreaseBrushSize();
+                        window.dispatchEvent(new CustomEvent('brush-size-changed'));
+                    }
+                );
                 smallerBtn.style.backgroundColor = '#f97316';
                 smallerBtn.style.width = buttonSize + 'px';
                 smallerBtn.style.height = buttonSize + 'px';
@@ -695,6 +754,33 @@
                 controlGroup.appendChild(smallerBtn);
 
                 brushSection.appendChild(controlGroup);
+
+                const opacityControl = document.createElement('div');
+                opacityControl.className = 'opacity-control';
+
+                const opacityLabel = document.createElement('label');
+                opacityLabel.setAttribute('for', 'brush-opacity-slider');
+                opacityLabel.textContent = 'Paint strength';
+                opacityControl.appendChild(opacityLabel);
+
+                const opacitySlider = document.createElement('input');
+                opacitySlider.type = 'range';
+                opacitySlider.id = 'brush-opacity-slider';
+                opacitySlider.className = 'opacity-slider';
+                opacitySlider.min = '20';
+                opacitySlider.max = '100';
+                opacitySlider.step = '5';
+                opacitySlider.value = String(Math.round(BrushEngine.getOpacity() * 100));
+                opacitySlider.setAttribute('aria-label', 'Paint strength');
+                opacitySlider.addEventListener('input', () => {
+                    BrushEngine.setBrushOpacity(Number(opacitySlider.value) / 100);
+                    window.dispatchEvent(new CustomEvent('brush-opacity-changed'));
+                });
+                opacitySlider.addEventListener('pointerdown', (e) => e.stopPropagation());
+                opacitySlider.addEventListener('touchstart', (e) => e.stopPropagation());
+                opacityControl.appendChild(opacitySlider);
+
+                brushSection.appendChild(opacityControl);
                 // Show the size preview below the +/- buttons.
                 brushSection.appendChild(previewWrap);
                 panel.appendChild(brushSection);
@@ -704,6 +790,7 @@
 
                 window.addEventListener('brush-size-changed', updateBrushSizePreview);
                 window.addEventListener('brush-color-changed', updateBrushSizePreview);
+                window.addEventListener('brush-opacity-changed', updateBrushSizePreview);
 
                 // Set initial selection to a random color
                 const randomColor = BrushEngine.getRandomColor();
