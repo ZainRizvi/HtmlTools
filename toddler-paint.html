@@ -57,6 +57,10 @@
             grid-template-columns: 1fr 1fr;
         }
 
+        .button-group.color-group {
+            grid-template-columns: 1fr 1fr;
+        }
+
         .button-group.control-group {
             grid-template-columns: 1fr 1fr;
         }
@@ -112,6 +116,16 @@
             stroke: currentColor;
             stroke-width: 2.5;
             stroke-linecap: round;
+        }
+
+        .control-btn.brush-bigger-btn svg {
+            width: 42px;
+            height: 42px;
+        }
+
+        .control-btn.brush-bigger-btn svg circle {
+            fill: currentColor;
+            stroke: none;
         }
 
         .button-divider {
@@ -597,6 +611,8 @@
                 return rows * buttonSize + Math.max(0, rows - 1) * GRID_GAP;
             }
 
+            const PALETTE_COLS = 2;
+
             function computePaletteLayout() {
                 const vh = window.innerHeight;
                 const maxPanelWidth = window.innerWidth * 0.45;
@@ -606,34 +622,35 @@
                     const brushHeight = getBrushSectionHeight(buttonSize);
                     const availableColorHeight = vh - fixedAboveColors - brushHeight;
                     const maxRows = Math.max(1, Math.floor((availableColorHeight + GRID_GAP) / (buttonSize + GRID_GAP)));
+                    const panelWidth = getPanelWidthForColumns(buttonSize, PALETTE_COLS);
 
-                    let bestLayout = null;
+                    if (panelWidth > maxPanelWidth) continue;
 
-                    for (let cols = 2; cols <= 6; cols++) {
-                        const panelWidth = getPanelWidthForColumns(buttonSize, cols);
-                        if (panelWidth > maxPanelWidth) continue;
+                    const maxFitColors = Math.min(MAX_COLORS, maxRows * PALETTE_COLS);
 
-                        const count = Math.min(MAX_COLORS, Math.max(MIN_COLORS, cols * maxRows));
-                        const rows = Math.ceil(count / cols);
+                    for (let count = maxFitColors; count >= MIN_COLORS; count--) {
+                        const rows = Math.ceil(count / PALETTE_COLS);
                         const totalHeight = fixedAboveColors + getColorGridHeight(buttonSize, rows) + brushHeight;
 
-                        if (totalHeight <= vh && count >= MIN_COLORS) {
-                            if (!bestLayout || count > bestLayout.count || (count === bestLayout.count && cols > bestLayout.cols)) {
-                                bestLayout = { buttonSize, cols, count, rows, panelWidth };
-                            }
+                        if (totalHeight <= vh) {
+                            return {
+                                buttonSize,
+                                cols: PALETTE_COLS,
+                                count,
+                                rows,
+                                panelWidth
+                            };
                         }
                     }
-
-                    if (bestLayout) return bestLayout;
                 }
 
-                const fallbackSize = 78;
+                const fallbackSize = 60;
                 return {
                     buttonSize: fallbackSize,
-                    cols: 2,
+                    cols: PALETTE_COLS,
                     count: MIN_COLORS,
-                    rows: Math.ceil(MIN_COLORS / 2),
-                    panelWidth: getPanelWidthForColumns(fallbackSize, 2)
+                    rows: Math.ceil(MIN_COLORS / PALETTE_COLS),
+                    panelWidth: getPanelWidthForColumns(fallbackSize, PALETTE_COLS)
                 };
             }
 
@@ -655,7 +672,7 @@
 
                 const visibleIndices = getVisibleColorIndices(layout.count);
 
-                colorGroup.style.gridTemplateColumns = `repeat(${layout.cols}, 1fr)`;
+                colorGroup.style.gridTemplateColumns = '1fr 1fr';
 
                 colorButtons.forEach((btn, index) => {
                     const visible = visibleIndices.includes(index);
@@ -779,7 +796,7 @@
                 colorGroup = document.createElement('div');
                 colorGroup.className = 'button-group color-group';
                 colorGroup.style.gap = GRID_GAP + 'px';
-                colorGroup.style.gridTemplateColumns = `repeat(${layout.cols}, 1fr)`;
+                colorGroup.style.gridTemplateColumns = '1fr 1fr';
 
                 const colors = BrushEngine.getColors();
                 colorButtons = colors.map(color => {
@@ -832,6 +849,7 @@
                         window.dispatchEvent(new CustomEvent('brush-size-changed'));
                     }
                 );
+                biggerBtn.classList.add('brush-bigger-btn');
                 biggerBtn.style.backgroundColor = '#22c55e';
                 biggerBtn.style.width = layout.buttonSize + 'px';
                 biggerBtn.style.height = layout.buttonSize + 'px';
