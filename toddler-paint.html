@@ -46,7 +46,7 @@
             width: 190px; /* updated dynamically by JS based on button size */
             max-width: 45vw;
             height: 100vh;
-            overflow-y: auto;
+            overflow: hidden;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             z-index: 50;
         }
@@ -306,7 +306,11 @@
                 '#FF8C00', // Orange
                 '#9370DB', // Purple
                 '#8B4513', // Brown
-                '#000000'  // Black
+                '#000000', // Black
+                '#FF006E', // Raspberry
+                '#00E5FF', // Bright Aqua
+                '#FF5252', // Coral Red
+                '#FFFFFF'  // White
             ];
 
             function hexToRgb(hex) {
@@ -533,6 +537,12 @@
 
         const ControlPanel = (() => {
             let currentSelectedColor = null;
+            let colorGroup = null;
+            let colorButtons = [];
+            const MIN_COLORS = 8;
+            const MAX_COLORS = 12;
+            const PANEL_PADDING = 12;
+            const GRID_GAP = 4;
 
             function updateBrushSizePreview() {
                 const wrap = document.getElementById('brush-size-preview-wrap');
@@ -569,35 +579,124 @@
                 );
             }
 
-            function getButtonSize() {
+            function getPreferredButtonSize() {
                 const shortDimension = Math.min(window.innerWidth, window.innerHeight);
-                // Always a left sidebar: size based on short dimension, clamped.
-                // Keep the preview area big enough to show up to the max brush size.
                 return Math.max(78, Math.min(92, Math.round(shortDimension * 0.16)));
+            }
+
+            function getBrushSectionHeight(buttonSize) {
+                const opacityBlock = 17 + GRID_GAP + 28;
+                return buttonSize + GRID_GAP + opacityBlock + GRID_GAP + (buttonSize * 2 + GRID_GAP) + GRID_GAP;
+            }
+
+            function getPanelWidthForColumns(buttonSize, columns) {
+                return PANEL_PADDING + columns * buttonSize + (columns - 1) * GRID_GAP;
+            }
+
+            function getColorGridHeight(buttonSize, rows) {
+                return rows * buttonSize + Math.max(0, rows - 1) * GRID_GAP;
+            }
+
+            function computePaletteLayout() {
+                const vh = window.innerHeight;
+                const maxPanelWidth = window.innerWidth * 0.45;
+                const fixedAboveColors = PANEL_PADDING + 2 + GRID_GAP;
+
+                for (let buttonSize = getPreferredButtonSize(); buttonSize >= 60; buttonSize -= 2) {
+                    const brushHeight = getBrushSectionHeight(buttonSize);
+                    const availableColorHeight = vh - fixedAboveColors - brushHeight;
+                    const maxRows = Math.max(1, Math.floor((availableColorHeight + GRID_GAP) / (buttonSize + GRID_GAP)));
+
+                    let bestLayout = null;
+
+                    for (let cols = 2; cols <= 6; cols++) {
+                        const panelWidth = getPanelWidthForColumns(buttonSize, cols);
+                        if (panelWidth > maxPanelWidth) continue;
+
+                        const count = Math.min(MAX_COLORS, Math.max(MIN_COLORS, cols * maxRows));
+                        const rows = Math.ceil(count / cols);
+                        const totalHeight = fixedAboveColors + getColorGridHeight(buttonSize, rows) + brushHeight;
+
+                        if (totalHeight <= vh && count >= MIN_COLORS) {
+                            if (!bestLayout || count > bestLayout.count || (count === bestLayout.count && cols > bestLayout.cols)) {
+                                bestLayout = { buttonSize, cols, count, rows, panelWidth };
+                            }
+                        }
+                    }
+
+                    if (bestLayout) return bestLayout;
+                }
+
+                const fallbackSize = 78;
+                return {
+                    buttonSize: fallbackSize,
+                    cols: 2,
+                    count: MIN_COLORS,
+                    rows: Math.ceil(MIN_COLORS / 2),
+                    panelWidth: getPanelWidthForColumns(fallbackSize, 2)
+                };
+            }
+
+            function getVisibleColorIndices(visibleCount) {
+                const indices = [];
+                for (let i = 0; i < visibleCount; i++) indices.push(i);
+
+                const colors = BrushEngine.getColors();
+                const selectedIndex = colors.indexOf(currentSelectedColor);
+                if (selectedIndex >= visibleCount && selectedIndex !== -1) {
+                    indices[visibleCount - 1] = selectedIndex;
+                }
+
+                return indices;
+            }
+
+            function applyColorPaletteLayout(layout) {
+                if (!colorGroup || colorButtons.length === 0) return;
+
+                const visibleIndices = getVisibleColorIndices(layout.count);
+
+                colorGroup.style.gridTemplateColumns = `repeat(${layout.cols}, 1fr)`;
+
+                colorButtons.forEach((btn, index) => {
+                    const visible = visibleIndices.includes(index);
+                    btn.style.display = visible ? '' : 'none';
+                    btn.style.width = layout.buttonSize + 'px';
+                    btn.style.height = layout.buttonSize + 'px';
+                    btn.style.minWidth = layout.buttonSize + 'px';
+                    btn.style.minHeight = layout.buttonSize + 'px';
+                });
+
+                if (currentSelectedColor) {
+                    const selectedBtn = document.querySelector(`[data-color="${currentSelectedColor}"]`);
+                    if (selectedBtn && selectedBtn.style.display !== 'none') {
+                        selectedBtn.setAttribute('aria-pressed', 'true');
+                        const glow = `0 0 0 3px rgba(0,0,0,0.3), 0 0 12px ${currentSelectedColor}, 0 0 20px ${currentSelectedColor}`;
+                        selectedBtn.style.boxShadow = glow;
+                        selectedBtn.style.transform = 'scale(1.1)';
+                    }
+                }
             }
 
             function updatePanelLayout() {
                 const panel = document.getElementById('control-panel');
-                const buttonSize = getButtonSize();
+                const layout = computePaletteLayout();
 
-                // Keep sidebar sized to exactly fit a 2-column palette.
-                // width = padding*2 + (2*buttonSize) + gap(4)
-                panel.style.width = (6 * 2 + buttonSize * 2 + 4) + 'px';
+                panel.style.width = layout.panelWidth + 'px';
 
-                // Update button sizes
                 const buttons = panel.querySelectorAll('button');
                 buttons.forEach(btn => {
-                    btn.style.width = buttonSize + 'px';
-                    btn.style.height = buttonSize + 'px';
-                    btn.style.minWidth = buttonSize + 'px';
-                    btn.style.minHeight = buttonSize + 'px';
+                    btn.style.width = layout.buttonSize + 'px';
+                    btn.style.height = layout.buttonSize + 'px';
+                    btn.style.minWidth = layout.buttonSize + 'px';
+                    btn.style.minHeight = layout.buttonSize + 'px';
                 });
 
                 const previewWrap = document.getElementById('brush-size-preview-wrap');
                 if (previewWrap) {
-                    previewWrap.style.height = (buttonSize * 2 + 4) + 'px';
+                    previewWrap.style.height = (layout.buttonSize * 2 + GRID_GAP) + 'px';
                 }
 
+                applyColorPaletteLayout(layout);
                 updateBrushSizePreview();
                 CanvasManager.updateCanvasSize();
             }
@@ -608,7 +707,7 @@
                 btn.dataset.color = color;
                 btn.style.backgroundColor = color;
                 btn.style.borderRadius = '50%';
-                btn.style.border = 'none';
+                btn.style.border = (color.toUpperCase() === '#FFFFFF') ? '2px solid #ccc' : 'none';
                 btn.style.cursor = 'pointer';
                 btn.style.transition = 'all 0.15s ease';
                 btn.setAttribute('aria-pressed', 'false');
@@ -644,8 +743,8 @@
                 return btn;
             }
 
-            const BRUSH_SMALLER_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/></svg>`;
-            const BRUSH_BIGGER_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/></svg>`;
+            const BRUSH_SMALLER_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4.5"/></svg>`;
+            const BRUSH_BIGGER_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="11"/></svg>`;
 
             function selectColor(color, buttonElement) {
                 // Remove selection from previous button
@@ -674,22 +773,23 @@
 
             function init() {
                 const panel = document.getElementById('control-panel');
-                const buttonSize = getButtonSize();
-                panel.style.width = (6 * 2 + buttonSize * 2 + 4) + 'px';
+                const layout = computePaletteLayout();
+                panel.style.width = layout.panelWidth + 'px';
 
-                // Create color buttons (2-column grid layout)
-                const colorGroup = document.createElement('div');
+                colorGroup = document.createElement('div');
                 colorGroup.className = 'button-group color-group';
-                colorGroup.style.gap = '4px';
+                colorGroup.style.gap = GRID_GAP + 'px';
+                colorGroup.style.gridTemplateColumns = `repeat(${layout.cols}, 1fr)`;
 
                 const colors = BrushEngine.getColors();
-                colors.forEach(color => {
+                colorButtons = colors.map(color => {
                     const btn = createColorButton(color);
-                    btn.style.width = buttonSize + 'px';
-                    btn.style.height = buttonSize + 'px';
-                    btn.style.minWidth = buttonSize + 'px';
-                    btn.style.minHeight = buttonSize + 'px';
+                    btn.style.width = layout.buttonSize + 'px';
+                    btn.style.height = layout.buttonSize + 'px';
+                    btn.style.minWidth = layout.buttonSize + 'px';
+                    btn.style.minHeight = layout.buttonSize + 'px';
                     colorGroup.appendChild(btn);
+                    return btn;
                 });
 
                 panel.appendChild(colorGroup);
@@ -709,7 +809,7 @@
                 const previewWrap = document.createElement('div');
                 previewWrap.id = 'brush-size-preview-wrap';
                 previewWrap.className = 'brush-size-preview-wrap';
-                previewWrap.style.height = (buttonSize * 2 + 4) + 'px';
+                previewWrap.style.height = (layout.buttonSize * 2 + GRID_GAP) + 'px';
                 previewWrap.setAttribute('role', 'img');
                 previewWrap.setAttribute('aria-label', 'Current brush size and color');
 
@@ -733,10 +833,10 @@
                     }
                 );
                 biggerBtn.style.backgroundColor = '#22c55e';
-                biggerBtn.style.width = buttonSize + 'px';
-                biggerBtn.style.height = buttonSize + 'px';
-                biggerBtn.style.minWidth = buttonSize + 'px';
-                biggerBtn.style.minHeight = buttonSize + 'px';
+                biggerBtn.style.width = layout.buttonSize + 'px';
+                biggerBtn.style.height = layout.buttonSize + 'px';
+                biggerBtn.style.minWidth = layout.buttonSize + 'px';
+                biggerBtn.style.minHeight = layout.buttonSize + 'px';
                 controlGroup.appendChild(biggerBtn);
 
                 const smallerBtn = createControlButton(
@@ -747,10 +847,10 @@
                     }
                 );
                 smallerBtn.style.backgroundColor = '#f97316';
-                smallerBtn.style.width = buttonSize + 'px';
-                smallerBtn.style.height = buttonSize + 'px';
-                smallerBtn.style.minWidth = buttonSize + 'px';
-                smallerBtn.style.minHeight = buttonSize + 'px';
+                smallerBtn.style.width = layout.buttonSize + 'px';
+                smallerBtn.style.height = layout.buttonSize + 'px';
+                smallerBtn.style.minWidth = layout.buttonSize + 'px';
+                smallerBtn.style.minHeight = layout.buttonSize + 'px';
                 controlGroup.appendChild(smallerBtn);
 
                 brushSection.appendChild(controlGroup);
@@ -785,6 +885,7 @@
                 brushSection.appendChild(previewWrap);
                 panel.appendChild(brushSection);
 
+                applyColorPaletteLayout(layout);
                 updateBrushSizePreview();
                 CanvasManager.updateCanvasSize();
 
