@@ -61,6 +61,28 @@
             grid-template-columns: 1fr 1fr;
         }
 
+        .brush-controls-section {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            width: 100%;
+        }
+
+        .brush-size-preview-wrap {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f5f5dc;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            box-sizing: border-box;
+        }
+
+        .brush-size-preview-canvas {
+            display: block;
+        }
+
         .button-divider {
             width: 100%;
             height: 2px;
@@ -255,47 +277,60 @@
                 '#000000'  // Black
             ];
 
+            function hexToRgb(hex) {
+                const normalized = (hex || '').trim().replace('#', '');
+                if (!normalized) return { r: 0, g: 0, b: 0 };
+                if (normalized.length === 3) {
+                    return {
+                        r: parseInt(normalized[0] + normalized[0], 16),
+                        g: parseInt(normalized[1] + normalized[1], 16),
+                        b: parseInt(normalized[2] + normalized[2], 16)
+                    };
+                }
+                if (normalized.length >= 6) {
+                    return {
+                        r: parseInt(normalized.slice(0, 2), 16),
+                        g: parseInt(normalized.slice(2, 4), 16),
+                        b: parseInt(normalized.slice(4, 6), 16)
+                    };
+                }
+                return { r: 0, g: 0, b: 0 };
+            }
+
             /**
-             * Draw a circular brush stroke at the specified coordinates
+             * Draw a soft brush dab (single radial gradient, same on canvas and sidebar preview).
              * @param {number} x - X coordinate
              * @param {number} y - Y coordinate
              * @param {string} color - Color to use (hex)
              * @param {number} size - Brush diameter in pixels
              */
-            function drawBrushStroke(x, y, color, size) {
-                ctx.save();
-                ctx.globalAlpha = 0.65; // 65% opacity for layering
-                ctx.fillStyle = color;
-                ctx.imageSmoothingEnabled = true;
-
+            function drawBrushStrokeOnCtx(targetCtx, x, y, color, size) {
+                targetCtx.save();
                 const radius = size / 2;
-                ctx.beginPath();
-                ctx.arc(x, y, radius, 0, Math.PI * 2);
-                ctx.fill();
+                const { r, g, b } = hexToRgb(color);
 
-                ctx.restore();
+                const gradient = targetCtx.createRadialGradient(
+                    x - radius * 0.12,
+                    y - radius * 0.12,
+                    radius * 0.08,
+                    x,
+                    y,
+                    radius
+                );
+                gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.72)`);
+                gradient.addColorStop(0.55, `rgba(${r}, ${g}, ${b}, 0.5)`);
+                gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+
+                targetCtx.fillStyle = gradient;
+                targetCtx.imageSmoothingEnabled = true;
+                targetCtx.beginPath();
+                targetCtx.arc(x, y, radius, 0, Math.PI * 2);
+                targetCtx.fill();
+                targetCtx.restore();
             }
 
-            /**
-             * Draw cursor preview circle (semi-transparent)
-             * @param {number} x - X coordinate
-             * @param {number} y - Y coordinate
-             * @param {string} color - Color to use
-             * @param {number} size - Brush diameter in pixels
-             */
-            function drawCursorPreview(x, y, color, size) {
-                ctx.save();
-                ctx.globalAlpha = 0.3; // 30% preview opacity
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 2;
-                ctx.imageSmoothingEnabled = true;
-
-                const radius = size / 2;
-                ctx.beginPath();
-                ctx.arc(x, y, radius, 0, Math.PI * 2);
-                ctx.stroke();
-
-                ctx.restore();
+            function drawBrushStroke(x, y, color, size) {
+                drawBrushStrokeOnCtx(ctx, x, y, color, size);
             }
 
             function getRandomColor() {
@@ -323,7 +358,7 @@
                     return this.setBrushSize(brushState.size - 15);
                 },
                 drawStroke: drawBrushStroke,
-                drawCursorPreview,
+                renderStrokeToContext: (targetCtx, x, y, color, size) => drawBrushStrokeOnCtx(targetCtx, x, y, color, size),
                 getRandomColor,
                 getColors: () => [...COLORS]
             };
@@ -453,10 +488,46 @@
         const ControlPanel = (() => {
             let currentSelectedColor = null;
 
+            function updateBrushSizePreview() {
+                const wrap = document.getElementById('brush-size-preview-wrap');
+                const canvas = document.getElementById('brush-size-preview-canvas');
+                if (!wrap || !canvas) return;
+
+                // Render preview using the exact same brush algorithm as the canvas tap.
+                // This makes the preview match the "single click" draw output much more closely
+                // than CSS blur/gradients.
+                const sizePx = Math.floor(Math.min(wrap.clientWidth, wrap.clientHeight));
+                if (!sizePx) return;
+
+                if (canvas.width !== sizePx) canvas.width = sizePx;
+                if (canvas.height !== sizePx) canvas.height = sizePx;
+
+                const pctx = canvas.getContext('2d', { alpha: true });
+                if (!pctx) return;
+
+                pctx.clearRect(0, 0, sizePx, sizePx);
+                pctx.fillStyle = '#f5f5dc';
+                pctx.fillRect(0, 0, sizePx, sizePx);
+
+                const size = BrushEngine.getSize();
+                // Draw at the same diameter (in CSS pixels) as the canvas tap.
+                // The preview container is made large enough that the full brush + blur fits.
+                const drawSize = Math.min(size, sizePx);
+
+                BrushEngine.renderStrokeToContext(
+                    pctx,
+                    sizePx / 2,
+                    sizePx / 2,
+                    BrushEngine.getColor(),
+                    drawSize
+                );
+            }
+
             function getButtonSize() {
                 const shortDimension = Math.min(window.innerWidth, window.innerHeight);
                 // Always a left sidebar: size based on short dimension, clamped.
-                return Math.max(60, Math.min(92, Math.round(shortDimension * 0.16)));
+                // Keep the preview area big enough to show up to the max brush size.
+                return Math.max(78, Math.min(92, Math.round(shortDimension * 0.16)));
             }
 
             function updatePanelLayout() {
@@ -476,6 +547,12 @@
                     btn.style.minHeight = buttonSize + 'px';
                 });
 
+                const previewWrap = document.getElementById('brush-size-preview-wrap');
+                if (previewWrap) {
+                    previewWrap.style.height = (buttonSize * 2 + 4) + 'px';
+                }
+
+                updateBrushSizePreview();
                 CanvasManager.updateCanvasSize();
             }
 
@@ -572,12 +649,28 @@
                 divider.style.width = '100%';
                 panel.appendChild(divider);
 
-                // Create control buttons
+                const brushSection = document.createElement('div');
+                brushSection.className = 'brush-controls-section';
+
+                const previewWrap = document.createElement('div');
+                previewWrap.id = 'brush-size-preview-wrap';
+                previewWrap.className = 'brush-size-preview-wrap';
+                previewWrap.style.height = (buttonSize * 2 + 4) + 'px';
+                previewWrap.setAttribute('role', 'img');
+                previewWrap.setAttribute('aria-label', 'Current brush size and color');
+
+                const previewCanvas = document.createElement('canvas');
+                previewCanvas.id = 'brush-size-preview-canvas';
+                previewCanvas.className = 'brush-size-preview-canvas';
+                // Real pixel size is set dynamically in updateBrushSizePreview().
+                previewCanvas.width = 180;
+                previewCanvas.height = 180;
+                previewWrap.appendChild(previewCanvas);
+
                 const controlGroup = document.createElement('div');
                 controlGroup.className = 'button-group control-group';
                 controlGroup.style.gap = '4px';
 
-                // Bigger button
                 const biggerBtn = createControlButton('+', '➕', () => {
                     BrushEngine.increaseBrushSize();
                     window.dispatchEvent(new CustomEvent('brush-size-changed'));
@@ -601,9 +694,16 @@
                 smallerBtn.style.minHeight = buttonSize + 'px';
                 controlGroup.appendChild(smallerBtn);
 
-                panel.appendChild(controlGroup);
-                // Ensure canvas reflects the final sidebar width
+                brushSection.appendChild(controlGroup);
+                // Show the size preview below the +/- buttons.
+                brushSection.appendChild(previewWrap);
+                panel.appendChild(brushSection);
+
+                updateBrushSizePreview();
                 CanvasManager.updateCanvasSize();
+
+                window.addEventListener('brush-size-changed', updateBrushSizePreview);
+                window.addEventListener('brush-color-changed', updateBrushSizePreview);
 
                 // Set initial selection to a random color
                 const randomColor = BrushEngine.getRandomColor();
@@ -611,6 +711,7 @@
                 if (randomBtn) {
                     selectColor(randomColor, randomBtn);
                 }
+                updateBrushSizePreview();
 
                 // Listen for layout changes
                 window.addEventListener('resize', updatePanelLayout);
@@ -696,61 +797,8 @@
         */
 
         (function initApp() {
-            // All modules are already initialized via their own init() calls during definition:
-            // - CanvasManager.init() @ Canvas module
-            // - TouchPaintHandler.init() @ Multi-touch module
-            // - ControlPanel.init() @ Control Panel module
-            // - FullscreenToggle.init() @ Fullscreen module
-
-            // Set up cursor preview on canvas
             const canvas = CanvasManager.getCanvas();
-            let lastPreviewX = -1;
-            let lastPreviewY = -1;
-
-            function updateCursorPreview(x, y) {
-                // Only update if position changed significantly
-                if (Math.abs(x - lastPreviewX) < 2 && Math.abs(y - lastPreviewY) < 2) {
-                    return;
-                }
-
-                lastPreviewX = x;
-                lastPreviewY = y;
-
-                // Clear previous preview and redraw canvas + preview
-                // Note: For now we just draw the preview, it naturally overlays
-                const size = BrushEngine.getSize();
-                const color = BrushEngine.getColor();
-
-                // Draw cursor preview (semi-transparent circle)
-                BrushEngine.drawCursorPreview(x, y, color, size);
-            }
-
-            canvas.addEventListener('pointermove', (event) => {
-                if (event.pointerType === 'touch' || event.pointerType === 'pen') {
-                    return; // Don't show preview for touch
-                }
-
-                const coords = CanvasManager.canvasToPageCoords(event.clientX, event.clientY);
-                // Redraw canvas to clear old preview and draw new one
-                // This is inefficient, but acceptable for preview rendering
-                // In a production app, we'd use a separate overlay layer
-
-                // For now, skip preview rendering to avoid flickering
-                // The design will still work fine without it on desktop
-            });
-
-            // Handle brush state changes
-            window.addEventListener('brush-color-changed', (event) => {
-                // Color changed, cursor preview will show new color on next move
-            });
-
-            window.addEventListener('brush-size-changed', (event) => {
-                // Size changed, cursor preview will show new size on next move
-            });
-
-            // Focus canvas for accessibility
             canvas.focus();
-
             console.log('Toddler Paint initialized successfully!');
         })();
     </script>
