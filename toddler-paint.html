@@ -312,6 +312,7 @@
                 isDrawing: false
             };
 
+            // 12 toddler-friendly hues — each slot is a distinct family (no second pink/cyan).
             const COLORS = [
                 '#FF1493', // Hot Pink
                 '#87CEEB', // Sky Blue
@@ -321,10 +322,10 @@
                 '#9370DB', // Purple
                 '#8B4513', // Brown
                 '#000000', // Black
-                '#FF006E', // Raspberry
-                '#00E5FF', // Bright Aqua
-                '#FF5252', // Coral Red
-                '#FFFFFF'  // White
+                '#E53935', // Red
+                '#00897B', // Teal
+                '#FFB6A3', // Peach
+                '#FFFFFF'  // White (border added on swatch for visibility)
             ];
 
             function hexToRgb(hex) {
