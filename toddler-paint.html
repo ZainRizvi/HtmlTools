@@ -409,12 +409,12 @@
                     return;
                 }
 
-                const spacing = Math.max(2, size * 0.1);
+                const spacing = Math.max(2, size * 0.08);
                 const referenceSpacing = size * 0.55;
                 const stampOpacity = baseOpacity * (spacing / referenceSpacing);
-                const steps = Math.ceil(distance / spacing);
+                const steps = Math.max(1, Math.ceil(distance / spacing));
 
-                for (let i = 1; i <= steps; i++) {
+                for (let i = 0; i <= steps; i++) {
                     const t = i / steps;
                     drawBrushStrokeOnCtx(
                         targetCtx,
@@ -483,21 +483,7 @@
             const canvas = CanvasManager.getCanvas();
             const activeStrokes = new Map(); // pointerId -> {x, y, lastX, lastY}
 
-            /**
-             * Connect two pointer samples with a continuous brush segment.
-             * minMove is decoupled from stamp spacing so holds ignore jitter
-             * while drags still get dense, gap-free interpolation.
-             */
-            function drawLineTo(fromX, fromY, toX, toY, color, size) {
-                const dx = toX - fromX;
-                const dy = toY - fromY;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                const minMove = size * 0.55;
-
-                if (distance < minMove * 0.25) return;
-
-                BrushEngine.drawSegment(fromX, fromY, toX, toY, color, size);
-            }
+            const JITTER_THRESHOLD_PX = 2;
 
             function handlePointerDown(event) {
                 if (event.pointerType !== 'touch' && event.pointerType !== 'pen' && event.pointerType !== 'mouse') {
@@ -523,21 +509,31 @@
                 const stroke = activeStrokes.get(event.pointerId);
                 if (!stroke) return;
 
-                const coords = CanvasManager.canvasToPageCoords(event.clientX, event.clientY);
+                const events = typeof event.getCoalescedEvents === 'function'
+                    ? event.getCoalescedEvents()
+                    : [event];
 
-                // Interpolate and draw line to new position
-                drawLineTo(
-                    stroke.lastX,
-                    stroke.lastY,
-                    coords.x,
-                    coords.y,
-                    BrushEngine.getColor(),
-                    BrushEngine.getSize()
-                );
+                for (const moveEvent of events) {
+                    const coords = CanvasManager.canvasToPageCoords(moveEvent.clientX, moveEvent.clientY);
+                    const dx = coords.x - stroke.lastX;
+                    const dy = coords.y - stroke.lastY;
+                    const distance = Math.hypot(dx, dy);
 
-                // Update position
-                stroke.lastX = coords.x;
-                stroke.lastY = coords.y;
+                    // Ignore sub-pixel jitter while holding still. Do not advance lastX/lastY
+                    // when skipping — advancing without drawing was the source of line gaps.
+                    if (distance < JITTER_THRESHOLD_PX) continue;
+
+                    BrushEngine.drawSegment(
+                        stroke.lastX,
+                        stroke.lastY,
+                        coords.x,
+                        coords.y,
+                        BrushEngine.getColor(),
+                        BrushEngine.getSize()
+                    );
+                    stroke.lastX = coords.x;
+                    stroke.lastY = coords.y;
+                }
             }
 
             function handlePointerUp(event) {
