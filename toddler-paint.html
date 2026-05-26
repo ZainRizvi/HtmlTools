@@ -384,6 +384,52 @@
                 drawBrushStrokeOnCtx(ctx, x, y, color, size, brushState.opacity);
             }
 
+            /**
+             * Draw a continuous smudge between two points using overlapping dabs.
+             * Denser spacing than the old line stamp keeps strokes gap-free; per-dab
+             * alpha is scaled down so short holds do not stack to full opacity.
+             * @param {CanvasRenderingContext2D} targetCtx
+             * @param {number} fromX
+             * @param {number} fromY
+             * @param {number} toX
+             * @param {number} toY
+             * @param {string} color
+             * @param {number} size
+             * @param {number} [opacity]
+             */
+            function drawBrushSegmentOnCtx(targetCtx, fromX, fromY, toX, toY, color, size, opacity) {
+                const dx = toX - fromX;
+                const dy = toY - fromY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const baseOpacity = opacity ?? brushState.opacity;
+
+                if (distance < 0.5) {
+                    drawBrushStrokeOnCtx(targetCtx, toX, toY, color, size, baseOpacity);
+                    return;
+                }
+
+                const spacing = Math.max(2, size * 0.1);
+                const referenceSpacing = size * 0.55;
+                const stampOpacity = baseOpacity * (spacing / referenceSpacing);
+                const steps = Math.ceil(distance / spacing);
+
+                for (let i = 1; i <= steps; i++) {
+                    const t = i / steps;
+                    drawBrushStrokeOnCtx(
+                        targetCtx,
+                        fromX + dx * t,
+                        fromY + dy * t,
+                        color,
+                        size,
+                        stampOpacity
+                    );
+                }
+            }
+
+            function drawBrushSegment(fromX, fromY, toX, toY, color, size) {
+                drawBrushSegmentOnCtx(ctx, fromX, fromY, toX, toY, color, size, brushState.opacity);
+            }
+
             function getRandomColor() {
                 return COLORS[Math.floor(Math.random() * COLORS.length)];
             }
@@ -415,6 +461,7 @@
                     return this.setBrushSize(brushState.size - 15);
                 },
                 drawStroke: drawBrushStroke,
+                drawSegment: drawBrushSegment,
                 renderStrokeToContext: (targetCtx, x, y, color, size) =>
                     drawBrushStrokeOnCtx(targetCtx, x, y, color, size, brushState.opacity),
                 getRandomColor,
@@ -436,27 +483,19 @@
             const activeStrokes = new Map(); // pointerId -> {x, y, lastX, lastY}
 
             /**
-             * Interpolate between two points and draw strokes along the path
-             * Helps create smooth lines for fast strokes
+             * Connect two pointer samples with a continuous brush segment.
+             * minMove is decoupled from stamp spacing so holds ignore jitter
+             * while drags still get dense, gap-free interpolation.
              */
             function drawLineTo(fromX, fromY, toX, toY, color, size) {
                 const dx = toX - fromX;
                 const dy = toY - fromY;
                 const distance = Math.sqrt(dx * dx + dy * dy);
-                const spacing = size * 0.55;
+                const minMove = size * 0.55;
 
-                if (distance < spacing * 0.25) return;
+                if (distance < minMove * 0.25) return;
 
-                const steps = Math.ceil(distance / spacing);
-                for (let i = 1; i <= steps; i++) {
-                    const t = i / steps;
-                    BrushEngine.drawStroke(
-                        fromX + dx * t,
-                        fromY + dy * t,
-                        color,
-                        size
-                    );
-                }
+                BrushEngine.drawSegment(fromX, fromY, toX, toY, color, size);
             }
 
             function handlePointerDown(event) {
