@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<!--
+  Bark speech-to-text playground.
+  Origin: agent session https://claude.ai/code/session_01MB6aCFvC9uiTtzMAHkFuyY
+  Runs Underdog Bark 3.0 (a Parakeet-TDT fine-tune by Conway Research) fully in the browser.
+  The community ONNX export (ai-ecoverse/Underdog-Bark-3.0-ONNX) is executed by onnxruntime-web's
+  WebAssembly backend, so no model "conversion" step is needed at runtime. Audio never leaves the device.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Speak into your microphone and watch Underdog Bark 3.0 transcribe it live, entirely in your browser using WebAssembly.">
+<title>Bark Speech to Text</title>
+<style>
+    :root {
+        --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #667085; --border: #dfe3ea;
+        --accent: #2f6fed; --accent-text: #ffffff; --danger: #d92d20; --partial: #8a94a6; --ok: #12a05c;
+    }
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --bg: #12151b; --card: #1b2029; --text: #e8ebf1; --muted: #98a2b3; --border: #2d3441;
+            --accent: #6a9bff; --accent-text: #0b1020; --danger: #ff6b5e; --partial: #7c879a; --ok: #3ccf8e;
+        }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 1.5rem; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 20px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    button, select { font: inherit; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); padding: 8px 14px; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+    button.recording { background: var(--danger); border-color: var(--danger); color: #fff; }
+    button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+    progress { width: 100%; height: 10px; margin-top: 10px; }
+    .status { color: var(--muted); font-size: .9rem; margin-top: 8px; min-height: 1.3em; }
+    .status.err { color: var(--danger); }
+    .meter { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-top: 12px; }
+    .meter > div { height: 100%; width: 0; background: var(--ok); transition: width .08s linear; }
+    #transcript { min-height: 180px; white-space: pre-wrap; word-wrap: break-word; font-size: 1.1rem; }
+    #transcript .partial { color: var(--partial); font-style: italic; }
+    #transcript .empty { color: var(--muted); }
+    label.chk { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: .9rem; }
+    details { color: var(--muted); font-size: .9rem; }
+    details p { margin: 6px 0; }
+    footer { color: var(--muted); font-size: .85rem; margin-top: 24px; }
+    a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+    <h1>Bark Speech to Text</h1>
+    <p class="sub">Underdog Bark 3.0 running locally in your browser via WebAssembly. Nothing is uploaded.</p>
+
+    <section class="card" aria-labelledby="model-h">
+        <h2 id="model-h" style="font-size:1rem;margin:0 0 8px">1. Load the model</h2>
+        <div class="row">
+            <button id="loadBtn" class="primary">Download &amp; load model</button>
+            <label class="chk">Precision
+                <select id="variant" aria-label="Model precision">
+                    <option value="quantized" selected>8-bit (~910 MB, recommended)</option>
+                    <option value="fp16">fp16 (~1.3 GB, may be unsupported on CPU)</option>
+                </select>
+            </label>
+            <button id="clearBtn" title="Delete the cached model files from this browser">Clear cached model</button>
+        </div>
+        <progress id="loadProgress" value="0" max="1" hidden></progress>
+        <div id="loadStatus" class="status" role="status">The model is downloaded once and cached in your browser.</div>
+    </section>
+
+    <section class="card" aria-labelledby="speak-h">
+        <h2 id="speak-h" style="font-size:1rem;margin:0 0 8px">2. Speak</h2>
+        <div class="row">
+            <button id="micBtn" disabled>Start recording</button>
+            <button id="fileBtn" disabled>Transcribe audio file…</button>
+            <input id="fileInput" type="file" accept="audio/*,video/*" hidden>
+            <label class="chk"><input type="checkbox" id="liveChk" checked> Live preview while speaking</label>
+        </div>
+        <div class="meter" aria-hidden="true"><div id="level"></div></div>
+        <div id="runStatus" class="status" role="status"></div>
+    </section>
+
+    <section class="card" aria-labelledby="out-h">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px">
+            <h2 id="out-h" style="font-size:1rem;margin:0">Transcript</h2>
+            <span class="row">
+                <button id="copyBtn">Copy</button>
+                <button id="downloadBtn">Download .txt</button>
+                <button id="resetBtn">Clear</button>
+            </span>
+        </div>
+        <div id="transcript" aria-live="polite"><span class="empty">Your words will appear here.</span></div>
+    </section>
+
+    <details class="card">
+        <summary>How this works</summary>
+        <p>Bark 3.0 is a 0.6B-parameter English speech model (a fine-tune of NVIDIA Parakeet TDT). It transcribes whole utterances rather than streaming word by word, so "live" mode re-transcribes the sentence you are currently speaking about once a second and shows it in grey, then locks it in when you pause.</p>
+        <p>The ONNX weights come from <a href="https://huggingface.co/ai-ecoverse/Underdog-Bark-3.0-ONNX">ai-ecoverse/Underdog-Bark-3.0-ONNX</a> (CC-BY-4.0, original model by <a href="https://huggingface.co/ConwayResearch/Underdog-Bark-3.0">Conway Research</a>) and run on <a href="https://onnxruntime.ai/docs/tutorials/web/">onnxruntime-web</a>'s WebAssembly backend inside a Web Worker. Mel features and the TDT decoding loop are plain JavaScript in this file.</p>
+        <p>Speed depends on your CPU. WebAssembly threads need cross-origin isolation, which most static hosts do not send, so this page may run single-threaded.</p>
+    </details>
+
+    <footer>
+        <a href="https://github.com/zainrizvi/htmltools/blob/main/bark-speech-to-text.html">View source</a>
+    </footer>
+</main>
+
+<!-- MODULE: Web Worker source (model loading, mel features, TDT decoding)
+     Kept as an inert <script type="text/plain"> and started from a Blob URL so the tool stays one file.
+     Copy this block plus the "Worker client" module into any tool that needs Bark ASR.
+-->
+<script type="text/plain" id="workerSource">
+import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.wasm.min.mjs';
+
+const ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
+const HF = 'https://huggingface.co/ai-ecoverse/Underdog-Bark-3.0-ONNX/resolve/main/';
+const CACHE_NAME = 'bark-3.0-onnx-v1';
+const BLANK = 8192, EOS = 3, HIDDEN = 640, LAYERS = 2, DURATIONS = [0, 1, 2, 3, 4];
+
+/* ---------- Mel front end (matches transformers' ParakeetFeatureExtractor) ---------- */
+const SR = 16000, N_FFT = 512, HOP = 160, WIN = 400, N_MELS = 128, LEAD = 4000, PREEMPH = 0.97;
+const N_BINS = N_FFT / 2 + 1;
+
+function hzToMel(f) { return f >= 1000 ? 15 + Math.log(f / 1000) / (Math.log(6.4) / 27) : f / (200 / 3); }
+function melToHz(m) { return m >= 15 ? 1000 * Math.exp((Math.log(6.4) / 27) * (m - 15)) : m * (200 / 3); }
+
+/** Slaney-scale, slaney-normalised mel filterbank (librosa.filters.mel defaults). Returns Float32Array[N_MELS*N_BINS]. */
+function buildMelFilters() {
+    const fftFreqs = Array.from({ length: N_BINS }, (_, i) => (i * SR) / N_FFT);
+    const mMin = hzToMel(0), mMax = hzToMel(SR / 2);
+    const melF = Array.from({ length: N_MELS + 2 }, (_, i) => melToHz(mMin + ((mMax - mMin) * i) / (N_MELS + 1)));
+    const w = new Float32Array(N_MELS * N_BINS);
+    for (let i = 0; i < N_MELS; i++) {
+        const fdLo = melF[i + 1] - melF[i], fdHi = melF[i + 2] - melF[i + 1];
+        const enorm = 2 / (melF[i + 2] - melF[i]);
+        for (let k = 0; k < N_BINS; k++) {
+            const lower = (fftFreqs[k] - melF[i]) / fdLo;
+            const upper = (melF[i + 2] - fftFreqs[k]) / fdHi;
+            w[i * N_BINS + k] = Math.max(0, Math.min(lower, upper)) * enorm;
+        }
+    }
+    return w;
+}
+
+const MEL = buildMelFilters();
+const HANN = (() => {
+    const w = new Float64Array(N_FFT), off = (N_FFT - WIN) / 2;
+    for (let i = 0; i < WIN; i++) w[off + i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (WIN - 1));
+    return w;
+})();
+const COS = new Float64Array(N_FFT / 2), SIN = new Float64Array(N_FFT / 2);
+for (let i = 0; i < N_FFT / 2; i++) { COS[i] = Math.cos((2 * Math.PI * i) / N_FFT); SIN[i] = -Math.sin((2 * Math.PI * i) / N_FFT); }
+const BITREV = (() => {
+    const bits = Math.log2(N_FFT), r = new Uint16Array(N_FFT);
+    for (let i = 0; i < N_FFT; i++) { let x = i, y = 0; for (let b = 0; b < bits; b++) { y = (y << 1) | (x & 1); x >>= 1; } r[i] = y; }
+    return r;
+})();
+
+/** In-place iterative radix-2 FFT of length N_FFT. */
+function fft(re, im) {
+    for (let i = 0; i < N_FFT; i++) {
+        const j = BITREV[i];
+        if (j > i) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+    }
+    for (let size = 2; size <= N_FFT; size <<= 1) {
+        const half = size >> 1, step = N_FFT / size;
+        for (let start = 0; start < N_FFT; start += size) {
+            for (let k = 0, tw = 0; k < half; k++, tw += step) {
+                const a = start + k, b = a + half;
+                const tr = re[b] * COS[tw] - im[b] * SIN[tw];
+                const ti = re[b] * SIN[tw] + im[b] * COS[tw];
+                re[b] = re[a] - tr; im[b] = im[a] - ti;
+                re[a] += tr; im[a] += ti;
+            }
+        }
+    }
+}
+
+/**
+ * Compute normalised log-mel features for one utterance.
+ * @param {Float32Array} wave - mono 16 kHz samples (without leading silence)
+ * @returns {{features: Float32Array, mask: BigInt64Array, frames: number}}
+ */
+function computeFeatures(wave) {
+    const L = wave.length + LEAD;
+    const x = new Float32Array(L);
+    x.set(wave, LEAD);
+    for (let i = L - 1; i > 0; i--) x[i] -= PREEMPH * x[i - 1];
+    const frames = 1 + Math.floor(L / HOP), valid = Math.floor(L / HOP);
+    const feats = new Float32Array(frames * N_MELS);
+    const re = new Float64Array(N_FFT), im = new Float64Array(N_FFT), power = new Float32Array(N_BINS);
+    const pad = N_FFT / 2;
+    for (let f = 0; f < frames; f++) {
+        const base = f * HOP - pad;
+        for (let i = 0; i < N_FFT; i++) {
+            const idx = base + i;
+            re[i] = idx >= 0 && idx < L ? x[idx] * HANN[i] : 0;
+            im[i] = 0;
+        }
+        fft(re, im);
+        for (let k = 0; k < N_BINS; k++) power[k] = re[k] * re[k] + im[k] * im[k];
+        for (let m = 0; m < N_MELS; m++) {
+            let s = 0;
+            const row = m * N_BINS;
+            for (let k = 0; k < N_BINS; k++) s += MEL[row + k] * power[k];
+            feats[f * N_MELS + m] = Math.log(s + 5.960464477539063e-8);
+        }
+    }
+    for (let m = 0; m < N_MELS; m++) {
+        let mean = 0;
+        for (let f = 0; f < valid; f++) mean += feats[f * N_MELS + m];
+        mean /= valid;
+        let v = 0;
+        for (let f = 0; f < valid; f++) { const d = feats[f * N_MELS + m] - mean; v += d * d; }
+        const std = Math.sqrt(v / Math.max(valid - 1, 1));
+        for (let f = 0; f < frames; f++) {
+            feats[f * N_MELS + m] = f < valid ? (feats[f * N_MELS + m] - mean) / (std + 1e-5) : 0;
+        }
+    }
+    const mask = new BigInt64Array(frames);
+    for (let f = 0; f < valid; f++) mask[f] = 1n;
+    return { features: feats, mask, frames };
+}
+
+/* ---------- Model loading with cache + progress ---------- */
+let encoder = null, decoder = null, pieces = null;
+
+async function fetchCached(url, label, weight) {
+    let cache = null;
+    try { cache = await caches.open(CACHE_NAME); } catch (e) { /* Cache API unavailable (e.g. private mode) */ }
+    if (cache) {
+        const hit = await cache.match(url);
+        if (hit) {
+            const buf = new Uint8Array(await hit.arrayBuffer());
+            postMessage({ type: 'progress', label: label + ' (cached)', fraction: weight.end });
+            return buf;
+        }
+    }
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Download failed (' + res.status + ') for ' + url);
+    const total = Number(res.headers.get('content-length')) || 0;
+    const reader = res.body.getReader();
+    const chunks = [];
+    let got = 0, lastPost = 0;
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        got += value.length;
+        const now = performance.now();
+        if (now - lastPost > 150) {
+            lastPost = now;
+            const frac = total ? got / total : 0;
+            postMessage({ type: 'progress', label: label + ' ' + (got / 1048576).toFixed(0) + (total ? ' / ' + (total / 1048576).toFixed(0) : '') + ' MB',
+                fraction: weight.start + (weight.end - weight.start) * frac });
+        }
+    }
+    const buf = new Uint8Array(got);
+    let off = 0;
+    for (const c of chunks) { buf.set(c, off); off += c.length; }
+    chunks.length = 0;
+    if (cache) {
+        try { await cache.put(url, new Response(buf, { headers: { 'content-type': 'application/octet-stream' } })); }
+        catch (e) { postMessage({ type: 'warn', message: 'Could not cache model (storage full?); it will be re-downloaded next time.' }); }
+    }
+    return buf;
+}
+
+async function loadModel(variant) {
+    const suffix = variant === 'fp16' ? '_fp16' : '_quantized';
+    const encName = 'encoder_model' + suffix + '.onnx';
+    ort.env.wasm.wasmPaths = ORT_BASE;
+    ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 4, 8) : 1;
+
+    const vocabRes = await fetch(HF + 'tokenizer.json');
+    const vocab = (await vocabRes.json()).model.vocab;
+    pieces = new Array(BLANK + 1).fill('');
+    for (const [piece, id] of Object.entries(vocab)) pieces[id] = piece;
+
+    const sizeHint = variant === 'fp16' ? 1219511040 : 838048256;
+    const sum = sizeHint + 70e6;
+    const wData = { start: 0, end: sizeHint / sum }, wDec = { start: sizeHint / sum, end: 1 };
+    const encGraph = await fetchCached(HF + 'onnx/' + encName, 'Encoder graph', { start: 0, end: 0.001 });
+    const encData = await fetchCached(HF + 'onnx/' + encName + '_data', 'Encoder weights', wData);
+    const decBytes = await fetchCached(HF + 'onnx/decoder_joint_model' + (variant === 'fp16' ? '_fp16' : '_quantized') + '.onnx', 'Decoder', wDec);
+
+    postMessage({ type: 'progress', label: 'Compiling model (this can take a minute)…', fraction: 1 });
+    const opts = { executionProviders: ['wasm'], graphOptimizationLevel: 'all' };
+    encoder = await ort.InferenceSession.create(encGraph, { ...opts, externalData: [{ path: encName + '_data', data: encData }] });
+    decoder = await ort.InferenceSession.create(decBytes, opts);
+    postMessage({ type: 'ready', threads: ort.env.wasm.numThreads });
+}
+
+/* ---------- Transcription ---------- */
+function argmax(a, n) {
+    let best = 0, bv = a[0];
+    for (let i = 1; i < n; i++) if (a[i] > bv) { bv = a[i]; best = i; }
+    return best;
+}
+
+/** Greedy TDT decoding over the encoder output. Returns the transcript text. */
+async function decodeTdt(enc, encLen) {
+    const frames = enc.dims[1], data = enc.data;
+    let h = new Float32Array(LAYERS * HIDDEN), c = new Float32Array(LAYERS * HIDDEN);
+    let last = BLANK, t = 0, steps = 0;
+    const maxSteps = 10 * frames;
+    const ids = [];
+    while (t < encLen && steps++ < maxSteps) {
+        const out = await decoder.run({
+            encoder_outputs: new ort.Tensor('float32', data.subarray(t * HIDDEN, (t + 1) * HIDDEN), [1, 1, HIDDEN]),
+            input_ids: new ort.Tensor('int64', BigInt64Array.of(BigInt(last)), [1, 1]),
+            state_h: new ort.Tensor('float32', h, [LAYERS, 1, HIDDEN]),
+            state_c: new ort.Tensor('float32', c, [LAYERS, 1, HIDDEN]),
+        });
+        const tok = argmax(out.token_logits.data, BLANK + 1);
+        let dur = DURATIONS[argmax(out.duration_logits.data, DURATIONS.length)];
+        if (tok === BLANK) dur = Math.max(dur, 1);
+        else {
+            last = tok; h = out.state_h_out.data; c = out.state_c_out.data;
+            if (tok === EOS) break;
+            ids.push(tok);
+        }
+        t += dur;
+    }
+    return ids.map(i => pieces[i]).filter(p => !(p.startsWith('<') && p.endsWith('>'))).join('').replace(/▁/g, ' ').trim();
+}
+
+async function transcribe(wave) {
+    if (wave.length < 1600) return '';
+    const { features, mask, frames } = computeFeatures(wave);
+    const out = await encoder.run({
+        input_features: new ort.Tensor('float32', features, [1, frames, N_MELS]),
+        attention_mask: new ort.Tensor('int64', mask, [1, frames]),
+    });
+    const encLen = Number(out.encoder_lengths.data[0]);
+    return decodeTdt(out.encoder_outputs, encLen);
+}
+
+onmessage = async (e) => {
+    const msg = e.data;
+    try {
+        if (msg.type === 'load') await loadModel(msg.variant);
+        else if (msg.type === 'transcribe') {
+            const t0 = performance.now();
+            const text = await transcribe(msg.audio);
+            postMessage({ type: 'result', id: msg.id, final: msg.final, text, ms: performance.now() - t0, seconds: msg.audio.length / SR });
+        }
+    } catch (err) {
+        postMessage({ type: 'error', id: msg.id, message: String(err && err.message || err) });
+    }
+};
+</script>
+
+<!-- MODULE: Worker client
+     Starts the inline worker from a Blob URL and exposes promise-style calls.
+     Copy this entire <script> block into any tool that needs to run an inline module worker.
+-->
+<script>
+/**
+ * Create a module Web Worker from the text of a <script type="text/plain"> element.
+ * @param {string} elementId - id of the element holding the worker source
+ * @returns {Worker}
+ */
+function createInlineWorker(elementId) {
+    const src = document.getElementById(elementId).textContent;
+    const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    return new Worker(url, { type: 'module' });
+}
+</script>
+
+<!-- MODULE: Audio helpers
+     Mic capture via AudioWorklet (ScriptProcessor fallback), linear resampling to 16 kHz, and file decoding.
+     Copy this entire <script> block into any tool that needs 16 kHz mono microphone audio.
+-->
+<script>
+/**
+ * Resample mono audio to a target rate using averaging-aware linear interpolation.
+ * @param {Float32Array} input
+ * @param {number} fromRate
+ * @param {number} toRate
+ * @returns {Float32Array}
+ */
+function resampleMono(input, fromRate, toRate = 16000) {
+    if (fromRate === toRate) return input;
+    const ratio = fromRate / toRate;
+    const out = new Float32Array(Math.floor(input.length / ratio));
+    for (let i = 0; i < out.length; i++) {
+        const start = i * ratio, end = Math.min((i + 1) * ratio, input.length);
+        const s = Math.floor(start), e = Math.max(s + 1, Math.ceil(end));
+        let sum = 0;
+        for (let j = s; j < e && j < input.length; j++) sum += input[j];
+        out[i] = sum / (Math.min(e, input.length) - s);
+    }
+    return out;
+}
+
+/**
+ * Start capturing the microphone and deliver mono 16 kHz Float32 chunks.
+ * @param {(chunk: Float32Array) => void} onChunk
+ * @returns {Promise<{stop: () => void}>}
+ */
+async function startMicCapture(onChunk) {
+    const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = ctx.createMediaStreamSource(stream);
+    const deliver = (data) => onChunk(resampleMono(data, ctx.sampleRate, 16000));
+    let node;
+    if (ctx.audioWorklet) {
+        const code = "class P extends AudioWorkletProcessor{process(i){const c=i[0][0];if(c)this.port.postMessage(c.slice(0));return true}}registerProcessor('cap',P)";
+        const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+        await ctx.audioWorklet.addModule(url);
+        URL.revokeObjectURL(url);
+        node = new AudioWorkletNode(ctx, 'cap');
+        node.port.onmessage = (e) => deliver(e.data);
+    } else {
+        node = ctx.createScriptProcessor(4096, 1, 1);
+        node.onaudioprocess = (e) => deliver(new Float32Array(e.inputBuffer.getChannelData(0)));
+    }
+    const mute = ctx.createGain();
+    mute.gain.value = 0;
+    source.connect(node);
+    node.connect(mute);
+    mute.connect(ctx.destination);
+    return {
+        stop() {
+            node.disconnect(); source.disconnect();
+            stream.getTracks().forEach(t => t.stop());
+            ctx.close();
+        }
+    };
+}
+
+/**
+ * Decode an audio/video file into mono 16 kHz samples.
+ * @param {File} file
+ * @returns {Promise<Float32Array>}
+ */
+async function decodeFileTo16k(file) {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    try {
+        const buf = await ctx.decodeAudioData(await file.arrayBuffer());
+        const mono = new Float32Array(buf.length);
+        for (let c = 0; c < buf.numberOfChannels; c++) {
+            const ch = buf.getChannelData(c);
+            for (let i = 0; i < ch.length; i++) mono[i] += ch[i] / buf.numberOfChannels;
+        }
+        return resampleMono(mono, buf.sampleRate, 16000);
+    } finally { ctx.close(); }
+}
+</script>
+
+<!-- MODULE: Clipboard copy + file download
+     Copy this entire <script> block into any tool that needs "Copy" and "Download" buttons.
+-->
+<script>
+/**
+ * Copy text to the clipboard and briefly show feedback on the button.
+ * @param {string} text
+ * @param {HTMLElement} button
+ */
+async function copyToClipboard(text, button) {
+    const original = button.textContent;
+    try { await navigator.clipboard.writeText(text); button.textContent = 'Copied!'; }
+    catch (e) { button.textContent = 'Copy failed'; }
+    setTimeout(() => { button.textContent = original; }, 1200);
+}
+
+/**
+ * Trigger a browser download of text content.
+ * @param {string} content
+ * @param {string} filename
+ * @param {string} mimeType
+ */
+function downloadFile(content, filename, mimeType = 'text/plain') {
+    const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+</script>
+
+<!-- APPLICATION: Bark playground
+     Wires the worker, microphone, simple energy-based end-of-speech detection and the transcript UI together.
+-->
+<script>
+(() => {
+    const $ = (id) => document.getElementById(id);
+    const SR = 16000;
+    const LIVE_INTERVAL_MS = 1000;   // how often to refresh the grey live preview
+    const SILENCE_END_S = 0.8;       // pause length that ends an utterance
+    const MAX_SEGMENT_S = 15;        // force a cut so segments stay cheap to re-run
+    const MIN_SPEECH_S = 0.3;
+    const SPEECH_RMS = 0.012;        // frame RMS considered speech
+
+    const ui = {
+        loadBtn: $('loadBtn'), clearBtn: $('clearBtn'), variant: $('variant'), progress: $('loadProgress'),
+        loadStatus: $('loadStatus'), micBtn: $('micBtn'), fileBtn: $('fileBtn'), fileInput: $('fileInput'),
+        liveChk: $('liveChk'), level: $('level'), runStatus: $('runStatus'), transcript: $('transcript'),
+        copyBtn: $('copyBtn'), downloadBtn: $('downloadBtn'), resetBtn: $('resetBtn')
+    };
+
+    let worker = null, modelReady = false;
+    let mic = null;
+    const committed = [];            // finished utterances
+    let partial = '';                // live preview text
+    let nextId = 1, busy = false, pendingFinals = 0, latestPartialId = 0;
+    let seg = [], segLen = 0, speechLen = 0, silenceRun = 0, sinceLive = 0, lastLive = 0, heardSpeech = false;
+    let stopping = false;
+
+    function setLoadStatus(msg, isErr = false) { ui.loadStatus.textContent = msg; ui.loadStatus.classList.toggle('err', isErr); }
+    function setRunStatus(msg, isErr = false) { ui.runStatus.textContent = msg; ui.runStatus.classList.toggle('err', isErr); }
+
+    function renderTranscript() {
+        ui.transcript.textContent = '';
+        if (!committed.length && !partial) {
+            const s = document.createElement('span'); s.className = 'empty'; s.textContent = 'Your words will appear here.';
+            ui.transcript.appendChild(s); return;
+        }
+        ui.transcript.appendChild(document.createTextNode(committed.join(' ')));
+        if (partial) {
+            const s = document.createElement('span'); s.className = 'partial';
+            s.textContent = (committed.length ? ' ' : '') + partial;
+            ui.transcript.appendChild(s);
+        }
+    }
+
+    function fullText() { return committed.join(' '); }
+
+    /* ----- Worker ----- */
+    function ensureWorker() {
+        if (worker) return worker;
+        worker = createInlineWorker('workerSource');
+        worker.onmessage = (e) => {
+            const m = e.data;
+            if (m.type === 'progress') {
+                ui.progress.hidden = false; ui.progress.value = m.fraction;
+                setLoadStatus(m.label + ' — ' + Math.round(m.fraction * 100) + '%');
+            } else if (m.type === 'warn') {
+                setLoadStatus(m.message);
+            } else if (m.type === 'ready') {
+                modelReady = true; ui.progress.hidden = true;
+                setLoadStatus('Model ready (' + (m.threads > 1 ? m.threads + ' threads' : 'single thread') + '). Cached for next time.');
+                ui.micBtn.disabled = false; ui.fileBtn.disabled = false; ui.loadBtn.disabled = true;
+            } else if (m.type === 'result') {
+                busy = false;
+                if (m.final) {
+                    pendingFinals--;
+                    if (m.text) committed.push(m.text);
+                    if (!pendingFinals && !heardSpeech) partial = '';
+                } else if (m.id === latestPartialId && mic) {
+                    partial = m.text;
+                }
+                renderTranscript();
+                setRunStatus(mic ? 'Listening… (last pass ' + (m.ms / 1000).toFixed(1) + 's for ' + m.seconds.toFixed(1) + 's of audio)' : '');
+                pump();
+            } else if (m.type === 'error') {
+                busy = false;
+                if (!modelReady) { setLoadStatus('Failed to load model: ' + m.message, true); ui.loadBtn.disabled = false; ui.progress.hidden = true; }
+                else setRunStatus('Transcription error: ' + m.message, true);
+            }
+        };
+        worker.onerror = (e) => { setLoadStatus('Worker error: ' + (e.message || 'unknown'), true); ui.loadBtn.disabled = false; };
+        return worker;
+    }
+
+    /* Job queue: finals are always run in order; only the newest live preview is kept. */
+    const queue = [];
+    function submit(audio, final) {
+        const id = nextId++;
+        if (final) pendingFinals++;
+        else { latestPartialId = id; for (let i = queue.length - 1; i >= 0; i--) if (!queue[i].final) queue.splice(i, 1); }
+        queue.push({ id, audio, final });
+        pump();
+    }
+    function pump() {
+        if (busy || !queue.length) return;
+        const job = queue.shift();
+        busy = true;
+        worker.postMessage({ type: 'transcribe', id: job.id, audio: job.audio, final: job.final }, [job.audio.buffer]);
+    }
+
+    function takeSegment() {
+        const out = new Float32Array(segLen);
+        let o = 0;
+        for (const c of seg) { out.set(c, o); o += c.length; }
+        return out;
+    }
+    function resetSegment() { seg = []; segLen = 0; speechLen = 0; silenceRun = 0; sinceLive = 0; heardSpeech = false; }
+
+    function finishSegment() {
+        if (speechLen / SR >= MIN_SPEECH_S) submit(takeSegment(), true);
+        partial = '';
+        renderTranscript();
+        resetSegment();
+    }
+
+    /* ----- Microphone handling ----- */
+    function onChunk(chunk) {
+        let sum = 0;
+        for (let i = 0; i < chunk.length; i++) sum += chunk[i] * chunk[i];
+        const rms = Math.sqrt(sum / chunk.length);
+        ui.level.style.width = Math.min(100, rms * 600) + '%';
+        const speaking = rms > SPEECH_RMS;
+
+        if (!heardSpeech && !speaking) {                 // keep a short lead-in only
+            seg.push(chunk); segLen += chunk.length;
+            while (segLen > SR * 0.3 && seg.length > 1) { segLen -= seg.shift().length; }
+            return;
+        }
+        seg.push(chunk); segLen += chunk.length;
+        if (speaking) { heardSpeech = true; speechLen += chunk.length; silenceRun = 0; }
+        else silenceRun += chunk.length;
+        sinceLive += chunk.length;
+
+        if (silenceRun / SR >= SILENCE_END_S || segLen / SR >= MAX_SEGMENT_S) { finishSegment(); return; }
+
+        const now = performance.now();
+        if (ui.liveChk.checked && sinceLive / SR >= 0.5 && speechLen / SR >= MIN_SPEECH_S
+            && now - lastLive >= LIVE_INTERVAL_MS && !busy && !queue.length) {
+            lastLive = now; sinceLive = 0;
+            submit(takeSegment(), false);
+        }
+    }
+
+    async function startRecording() {
+        try {
+            resetSegment(); stopping = false;
+            mic = await startMicCapture(onChunk);
+            ui.micBtn.textContent = 'Stop recording'; ui.micBtn.classList.add('recording');
+            ui.fileBtn.disabled = true;
+            setRunStatus('Listening…');
+        } catch (e) {
+            mic = null;
+            setRunStatus('Could not access the microphone: ' + (e.message || e.name), true);
+        }
+    }
+    function stopRecording() {
+        if (!mic) return;
+        mic.stop(); mic = null;
+        ui.micBtn.textContent = 'Start recording'; ui.micBtn.classList.remove('recording');
+        ui.fileBtn.disabled = false; ui.level.style.width = '0';
+        finishSegment();
+        setRunStatus(pendingFinals || busy ? 'Finishing transcription…' : '');
+    }
+
+    /* ----- File transcription ----- */
+    async function transcribeFile(file) {
+        try {
+            setRunStatus('Decoding ' + file.name + '…');
+            const audio = await decodeFileTo16k(file);
+            const CHUNK = SR * 30;
+            for (let off = 0; off < audio.length; off += CHUNK) submit(audio.slice(off, off + CHUNK), true);
+            setRunStatus('Transcribing ' + (audio.length / SR).toFixed(0) + 's of audio…');
+        } catch (e) { setRunStatus('Could not decode that file: ' + (e.message || e), true); }
+    }
+
+    /* ----- Events ----- */
+    ui.loadBtn.addEventListener('click', () => {
+        ui.loadBtn.disabled = true; ui.progress.hidden = false; ui.progress.value = 0;
+        setLoadStatus('Starting…');
+        ensureWorker().postMessage({ type: 'load', variant: ui.variant.value });
+    });
+    ui.clearBtn.addEventListener('click', async () => {
+        try { await caches.delete('bark-3.0-onnx-v1'); setLoadStatus('Cached model files deleted.'); }
+        catch (e) { setLoadStatus('Could not clear cache: ' + e.message, true); }
+    });
+    ui.micBtn.addEventListener('click', () => (mic ? stopRecording() : startRecording()));
+    ui.fileBtn.addEventListener('click', () => ui.fileInput.click());
+    ui.fileInput.addEventListener('change', () => { if (ui.fileInput.files[0]) transcribeFile(ui.fileInput.files[0]); ui.fileInput.value = ''; });
+    ui.copyBtn.addEventListener('click', () => copyToClipboard(fullText(), ui.copyBtn));
+    ui.downloadBtn.addEventListener('click', () => downloadFile(fullText() + '\n', 'transcript.txt'));
+    ui.resetBtn.addEventListener('click', () => { committed.length = 0; partial = ''; renderTranscript(); });
+
+    if (!navigator.mediaDevices || !window.Worker || typeof WebAssembly !== 'object') {
+        setLoadStatus('This browser lacks WebAssembly, Web Workers or microphone support.', true);
+        ui.loadBtn.disabled = true;
+    }
+    window.__bark = { committed };   // handy for debugging in the console
+    renderTranscript();
+})();
+</script>
+</body>
+</html>
