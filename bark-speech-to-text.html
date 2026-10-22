@@ -100,6 +100,7 @@
         <p>Bark 3.0 is a 0.6B-parameter English speech model (a fine-tune of NVIDIA Parakeet TDT). It transcribes whole utterances rather than streaming word by word, so "live" mode re-transcribes the sentence you are currently speaking about once a second and shows it in grey, then locks it in when you pause.</p>
         <p>The ONNX weights come from <a href="https://huggingface.co/ai-ecoverse/Underdog-Bark-3.0-ONNX">ai-ecoverse/Underdog-Bark-3.0-ONNX</a> (CC-BY-4.0, original model by <a href="https://huggingface.co/ConwayResearch/Underdog-Bark-3.0">Conway Research</a>) and run on <a href="https://onnxruntime.ai/docs/tutorials/web/">onnxruntime-web</a>'s WebAssembly backend inside a Web Worker. Mel features and the TDT decoding loop are plain JavaScript in this file.</p>
         <p>Speed depends on your CPU. WebAssembly threads need cross-origin isolation, which most static hosts do not send, so this page may run single-threaded.</p>
+        <p>Memory: starting the model needs roughly the model's size in RAM (about 0.9 GB for 8-bit, 0.5 GB for 4-bit) on top of the browser's own usage. If the browser closes the page with no error, it ran out of memory: phones default to the 4-bit model for that reason.</p>
     </details>
 
     <footer>
@@ -297,6 +298,22 @@ async function downloadFile(cache, file, progress) {
     return new Blob(parts);
 }
 
+/**
+ * A zero-length Uint8Array that reads ranges of a Blob on demand.
+ * onnxruntime-web copies external weights into WebAssembly memory one tensor at a time by calling
+ * `.byteLength` and `.subarray(start, end)` on whatever is passed as externalData. Serving those reads
+ * straight from the (disk-backed) Blob with FileReaderSync avoids holding a second full copy of the
+ * weights in JavaScript, which halves peak memory and keeps phones from running out.
+ */
+class BlobBackedBytes extends Uint8Array {
+    constructor(blob) { super(0); this.blob = blob; this.reader = new FileReaderSync(); }
+    get byteLength() { return this.blob.size; }
+    get length() { return this.blob.size; }
+    subarray(start = 0, end = this.blob.size) {
+        return new Uint8Array(this.reader.readAsArrayBuffer(this.blob.slice(start, end)));
+    }
+}
+
 async function loadModel(variant) {
     const v = VARIANTS[variant];
     ort.env.wasm.wasmPaths = ORT_BASE;
@@ -329,9 +346,12 @@ async function loadModel(variant) {
     postMessage({ type: 'progress', label: 'Starting the model (this can take a minute)…', fraction: 1 });
     const opts = { executionProviders: ['wasm'], graphOptimizationLevel: 'all' };
     const dataName = v.encoderData.path.split('/').pop();
-    encoder = await ort.InferenceSession.create(new Uint8Array(await blobs[0].arrayBuffer()),
-        { ...opts, externalData: [{ path: dataName, data: blobs[1] }] });
     decoder = await ort.InferenceSession.create(new Uint8Array(await blobs[2].arrayBuffer()), opts);
+    const encGraph = new Uint8Array(await blobs[0].arrayBuffer());
+    const lazy = typeof FileReaderSync === 'function';
+    const weights = lazy ? new BlobBackedBytes(blobs[1]) : new Uint8Array(await blobs[1].arrayBuffer());
+    blobs.length = 0;
+    encoder = await ort.InferenceSession.create(encGraph, { ...opts, externalData: [{ path: dataName, data: weights }] });
     postMessage({ type: 'ready', threads: ort.env.wasm.numThreads });
 }
 
@@ -581,10 +601,11 @@ function downloadFile(content, filename, mimeType = 'text/plain') {
             if (m.type === 'progress') {
                 ui.progress.hidden = false; ui.progress.value = m.fraction;
                 setLoadStatus(m.label + ' — ' + Math.round(m.fraction * 100) + '%');
+                setStage(m.fraction < 1 ? 'downloading the model (' + Math.round(m.fraction * 100) + '%)' : 'starting the model');
             } else if (m.type === 'warn') {
                 setLoadStatus(m.message);
             } else if (m.type === 'ready') {
-                modelReady = true; ui.progress.hidden = true;
+                modelReady = true; ui.progress.hidden = true; setStage('');
                 setLoadStatus('Model ready (' + (m.threads > 1 ? m.threads + ' threads' : 'single thread') + '). Cached for next time.');
                 ui.micBtn.disabled = false; ui.fileBtn.disabled = false; ui.loadBtn.disabled = true;
             } else if (m.type === 'result') {
@@ -601,7 +622,7 @@ function downloadFile(content, filename, mimeType = 'text/plain') {
                 pump();
             } else if (m.type === 'error') {
                 busy = false;
-                if (!modelReady) { setLoadStatus('Failed to load model: ' + m.message + ' — press the button to resume.', true); ui.loadBtn.disabled = false; ui.variant.disabled = false; ui.progress.hidden = true; showSavedProgress(); }
+                if (!modelReady) { setStage(''); setLoadStatus('Failed to load model: ' + m.message + ' — press the button to resume.', true); ui.loadBtn.disabled = false; ui.variant.disabled = false; ui.progress.hidden = true; showSavedProgress(); }
                 else setRunStatus('Transcription error: ' + m.message, true);
             }
         };
@@ -694,13 +715,51 @@ function downloadFile(content, filename, mimeType = 'text/plain') {
         try {
             setRunStatus('Decoding ' + file.name + '…');
             const audio = await decodeFileTo16k(file);
-            const CHUNK = SR * 30;
-            for (let off = 0; off < audio.length; off += CHUNK) submit(audio.slice(off, off + CHUNK), true);
+            // Encoder memory grows with clip length, so cut long files into pieces, each at the quietest
+            // 20 ms frame in the last 3 s before the limit so words are not split.
+            const MAX = SR * 15, SEARCH = SR * 3, FRAME = 320;
+            for (let off = 0; off < audio.length;) {
+                let end = Math.min(audio.length, off + MAX);
+                if (end < audio.length) {
+                    let best = end, bestE = Infinity;
+                    for (let f = end - SEARCH; f + FRAME <= end; f += FRAME) {
+                        let e = 0;
+                        for (let i = f; i < f + FRAME; i++) e += audio[i] * audio[i];
+                        if (e < bestE) { bestE = e; best = f + FRAME / 2; }
+                    }
+                    end = best;
+                }
+                submit(audio.slice(off, end), true);
+                off = end;
+            }
             setRunStatus('Transcribing ' + (audio.length / SR).toFixed(0) + 's of audio…');
         } catch (e) { setRunStatus('Could not decode that file: ' + (e.message || e), true); }
     }
 
     /* ----- Events ----- */
+    /* ----- Crash diagnostics -----
+       Browsers (iOS Safari especially) kill a tab that uses too much memory and reload it with no error.
+       Remember what the page was doing so the next load can say where it died. */
+    const STAGE_KEY = 'bark-stage';
+    function setStage(stage) { try { stage ? localStorage.setItem(STAGE_KEY, stage) : localStorage.removeItem(STAGE_KEY); } catch (e) { /* storage unavailable */ } }
+    function reportCrash() {
+        let last = null;
+        try { last = localStorage.getItem(STAGE_KEY); } catch (e) { return; }
+        if (!last) return;
+        setStage('');
+        const hint = last.startsWith('starting')
+            ? 'That is the step that needs the most memory. Try the 4-bit model, close other tabs, or use a desktop browser.'
+            : 'Any progress was saved, so pressing the button will resume.';
+        setLoadStatus('Last time, this page was closed by the browser while ' + last + ', probably because it ran out of memory. ' + hint, true);
+    }
+
+    /* Phones have far less memory to give a tab, so start them on the smaller model. */
+    const isMobile = (navigator.userAgentData && navigator.userAgentData.mobile)
+        || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+        || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform))   // iPadOS pretends to be a Mac
+        || (navigator.deviceMemory && navigator.deviceMemory < 4);
+    if (isMobile) ui.variant.value = 'q4f16';
+
     /** Show how much of the selected model is already in the cache, so an interrupted download reads as "Resume". */
     async function showSavedProgress() {
         try {
@@ -741,7 +800,8 @@ function downloadFile(content, filename, mimeType = 'text/plain') {
         ui.loadBtn.disabled = true;
     }
     showSavedProgress();
-    window.__bark = { committed };   // handy for debugging in the console
+    reportCrash();
+    window.__bark = { committed, get busy() { return busy || pendingFinals > 0 || queue.length > 0; } };   // handy for debugging in the console
     renderTranscript();
 })();
 </script>
