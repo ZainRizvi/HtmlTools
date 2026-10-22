@@ -61,14 +61,14 @@
             <button id="loadBtn" class="primary">Download &amp; load model</button>
             <label class="chk">Precision
                 <select id="variant" aria-label="Model precision">
-                    <option value="quantized" selected>8-bit (~910 MB, recommended)</option>
-                    <option value="fp16">fp16 (~1.3 GB, may be unsupported on CPU)</option>
+                    <option value="quantized" selected>8-bit (~910 MB, most accurate)</option>
+                    <option value="q4f16">4-bit (~525 MB, slower; for phones / low memory)</option>
                 </select>
             </label>
             <button id="clearBtn" title="Delete the cached model files from this browser">Clear cached model</button>
         </div>
         <progress id="loadProgress" value="0" max="1" hidden></progress>
-        <div id="loadStatus" class="status" role="status">The model is downloaded once and cached in your browser.</div>
+        <div id="loadStatus" class="status" role="status">The model is downloaded once and cached in your browser. If the download is interrupted, it picks up where it left off.</div>
     </section>
 
     <section class="card" aria-labelledby="speak-h">
@@ -115,8 +115,20 @@
 import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.wasm.min.mjs';
 
 const ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
-const HF = 'https://huggingface.co/ai-ecoverse/Underdog-Bark-3.0-ONNX/resolve/main/';
-const CACHE_NAME = 'bark-3.0-onnx-v1';
+const HF = 'https://huggingface.co/ai-ecoverse/Underdog-Bark-3.0-ONNX/resolve/31f3aba9ddbe2825ea96938ef91742ad4a12d691/';
+const CACHE_NAME = 'bark-3.0-onnx-v2';
+const VARIANTS = {
+    quantized: {
+        encoder: { path: 'onnx/encoder_model_quantized.onnx', size: 3272834 },
+        encoderData: { path: 'onnx/encoder_model_quantized.onnx_data', size: 838048256 },
+        decoder: { path: 'onnx/decoder_joint_model_quantized.onnx', size: 69895381 },
+    },
+    q4f16: {
+        encoder: { path: 'onnx/encoder_model_q4f16.onnx', size: 1288280 },
+        encoderData: { path: 'onnx/encoder_model_q4f16.onnx_data', size: 452846336 },
+        decoder: { path: 'onnx/decoder_joint_model_q4f16.onnx', size: 69895381 },
+    },
+};
 const BLANK = 8192, EOS = 3, HIDDEN = 640, LAYERS = 2, DURATIONS = [0, 1, 2, 3, 4];
 
 /* ---------- Mel front end (matches transformers' ParakeetFeatureExtractor) ---------- */
@@ -224,72 +236,102 @@ function computeFeatures(wave) {
     return { features: feats, mask, frames };
 }
 
-/* ---------- Model loading with cache + progress ---------- */
+/* ---------- Model loading: chunked, resumable, cached ----------
+   Files are fetched in 16 MB HTTP Range requests and each chunk is stored in Cache Storage as soon as it
+   arrives, so a reload or crash resumes where it left off and the whole model is never held in JS memory.
+   The chunks are stitched back together as a (disk-backed) Blob that onnxruntime-web reads directly. */
 let encoder = null, decoder = null, pieces = null;
+const CHUNK = 16 * 1048576;
 
-async function fetchCached(url, label, weight) {
-    let cache = null;
-    try { cache = await caches.open(CACHE_NAME); } catch (e) { /* Cache API unavailable (e.g. private mode) */ }
-    if (cache) {
-        const hit = await cache.match(url);
-        if (hit) {
-            const buf = new Uint8Array(await hit.arrayBuffer());
-            postMessage({ type: 'progress', label: label + ' (cached)', fraction: weight.end });
+/** Fetch bytes [start, end) of url, reporting progress; retries with backoff on network errors. */
+async function fetchRange(url, start, end, onBytes) {
+    for (let attempt = 1; ; attempt++) {
+        let got = 0;
+        try {
+            const res = await fetch(url, { headers: { Range: 'bytes=' + start + '-' + (end - 1) } });
+            if (res.status !== 206 && !(res.status === 200 && start === 0)) throw new Error('HTTP ' + res.status);
+            const buf = new Uint8Array(end - start);
+            const reader = res.body.getReader();
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const n = Math.min(value.length, buf.length - got);
+                buf.set(value.subarray(0, n), got);
+                got += n; onBytes(n);
+                if (got === buf.length) { reader.cancel().catch(() => {}); break; }
+            }
+            if (got !== buf.length) throw new Error('connection closed early');
             return buf;
+        } catch (err) {
+            onBytes(-got);
+            if (attempt >= 6) throw new Error('Download failed after retries: ' + err.message);
+            postMessage({ type: 'warn', message: 'Network hiccup (' + err.message + '), retrying…' });
+            await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
         }
     }
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Download failed (' + res.status + ') for ' + url);
-    const total = Number(res.headers.get('content-length')) || 0;
-    const reader = res.body.getReader();
-    const chunks = [];
-    let got = 0, lastPost = 0;
-    for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        got += value.length;
-        const now = performance.now();
-        if (now - lastPost > 150) {
-            lastPost = now;
-            const frac = total ? got / total : 0;
-            postMessage({ type: 'progress', label: label + ' ' + (got / 1048576).toFixed(0) + (total ? ' / ' + (total / 1048576).toFixed(0) : '') + ' MB',
-                fraction: weight.start + (weight.end - weight.start) * frac });
+}
+
+/** Download one file in cached chunks and return it as a Blob. */
+async function downloadFile(cache, file, progress) {
+    const url = HF + file.path, parts = [];
+    for (let i = 0, start = 0; start < file.size; i++, start += CHUNK) {
+        const end = Math.min(file.size, start + CHUNK), key = url + '?chunk=' + i + '&size=' + CHUNK;
+        let blob = null;
+        if (cache) {
+            const hit = await cache.match(key);
+            if (hit) { blob = await hit.blob(); if (blob.size !== end - start) blob = null; }
         }
+        if (blob) progress.add(end - start, true);
+        else {
+            const bytes = await fetchRange(url, start, end, n => progress.add(n));
+            blob = new Blob([bytes]);
+            if (cache) {
+                try {
+                    await cache.put(key, new Response(blob));
+                    blob = await (await cache.match(key)).blob();   // swap the in-memory copy for the stored one
+                } catch (e) { postMessage({ type: 'warn', message: 'Browser storage is full, so the model will not be cached.' }); cache = null; }
+            }
+        }
+        parts.push(blob);
     }
-    const buf = new Uint8Array(got);
-    let off = 0;
-    for (const c of chunks) { buf.set(c, off); off += c.length; }
-    chunks.length = 0;
-    if (cache) {
-        try { await cache.put(url, new Response(buf, { headers: { 'content-type': 'application/octet-stream' } })); }
-        catch (e) { postMessage({ type: 'warn', message: 'Could not cache model (storage full?); it will be re-downloaded next time.' }); }
-    }
-    return buf;
+    return new Blob(parts);
 }
 
 async function loadModel(variant) {
-    const suffix = variant === 'fp16' ? '_fp16' : '_quantized';
-    const encName = 'encoder_model' + suffix + '.onnx';
+    const v = VARIANTS[variant];
     ort.env.wasm.wasmPaths = ORT_BASE;
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 4, 8) : 1;
 
-    const vocabRes = await fetch(HF + 'tokenizer.json');
-    const vocab = (await vocabRes.json()).model.vocab;
+    let cache = null;
+    try { cache = await caches.open(CACHE_NAME); } catch (e) { /* Cache API unavailable (e.g. private mode) */ }
+    for (const old of await caches.keys().catch(() => [])) if (old.startsWith('bark-') && old !== CACHE_NAME) caches.delete(old);
+
+    const files = [v.encoder, v.encoderData, v.decoder, { path: 'tokenizer.json', size: 1159960 }];
+    const total = files.reduce((n, f) => n + f.size, 0);
+    let done = 0, fromCache = 0, lastPost = 0;
+    const progress = {
+        add(n, cached) {
+            done += n; if (cached) fromCache += n;
+            const now = performance.now();
+            if (now - lastPost < 200 && done < total) return;
+            lastPost = now;
+            const label = fromCache === done && done ? 'Reading cached model' : 'Downloading model';
+            postMessage({ type: 'progress', label: label + ' ' + (done / 1048576).toFixed(0) + ' / ' + (total / 1048576).toFixed(0) + ' MB', fraction: done / total });
+        }
+    };
+    const blobs = [];
+    for (const f of files) blobs.push(await downloadFile(cache, f, progress));
+
+    const vocab = JSON.parse(await blobs[3].text()).model.vocab;
     pieces = new Array(BLANK + 1).fill('');
     for (const [piece, id] of Object.entries(vocab)) pieces[id] = piece;
 
-    const sizeHint = variant === 'fp16' ? 1219511040 : 838048256;
-    const sum = sizeHint + 70e6;
-    const wData = { start: 0, end: sizeHint / sum }, wDec = { start: sizeHint / sum, end: 1 };
-    const encGraph = await fetchCached(HF + 'onnx/' + encName, 'Encoder graph', { start: 0, end: 0.001 });
-    const encData = await fetchCached(HF + 'onnx/' + encName + '_data', 'Encoder weights', wData);
-    const decBytes = await fetchCached(HF + 'onnx/decoder_joint_model' + (variant === 'fp16' ? '_fp16' : '_quantized') + '.onnx', 'Decoder', wDec);
-
-    postMessage({ type: 'progress', label: 'Compiling model (this can take a minute)…', fraction: 1 });
+    postMessage({ type: 'progress', label: 'Starting the model (this can take a minute)…', fraction: 1 });
     const opts = { executionProviders: ['wasm'], graphOptimizationLevel: 'all' };
-    encoder = await ort.InferenceSession.create(encGraph, { ...opts, externalData: [{ path: encName + '_data', data: encData }] });
-    decoder = await ort.InferenceSession.create(decBytes, opts);
+    const dataName = v.encoderData.path.split('/').pop();
+    encoder = await ort.InferenceSession.create(new Uint8Array(await blobs[0].arrayBuffer()),
+        { ...opts, externalData: [{ path: dataName, data: blobs[1] }] });
+    decoder = await ort.InferenceSession.create(new Uint8Array(await blobs[2].arrayBuffer()), opts);
     postMessage({ type: 'ready', threads: ort.env.wasm.numThreads });
 }
 
@@ -559,7 +601,7 @@ function downloadFile(content, filename, mimeType = 'text/plain') {
                 pump();
             } else if (m.type === 'error') {
                 busy = false;
-                if (!modelReady) { setLoadStatus('Failed to load model: ' + m.message, true); ui.loadBtn.disabled = false; ui.progress.hidden = true; }
+                if (!modelReady) { setLoadStatus('Failed to load model: ' + m.message + ' — press the button to resume.', true); ui.loadBtn.disabled = false; ui.variant.disabled = false; ui.progress.hidden = true; showSavedProgress(); }
                 else setRunStatus('Transcription error: ' + m.message, true);
             }
         };
@@ -659,13 +701,32 @@ function downloadFile(content, filename, mimeType = 'text/plain') {
     }
 
     /* ----- Events ----- */
+    /** Show how much of the selected model is already in the cache, so an interrupted download reads as "Resume". */
+    async function showSavedProgress() {
+        try {
+            const cache = await caches.open('bark-3.0-onnx-v2');
+            const v = ui.variant.value;
+            const n = (await cache.keys()).filter(r => r.url.includes('_' + v + '.onnx_data?chunk=')).length;
+            const chunks = { quantized: 50, q4f16: 27 }[v];
+            if (n >= chunks) ui.loadBtn.textContent = 'Load model (downloaded)';
+            else if (n) ui.loadBtn.textContent = 'Resume download (' + Math.round((100 * n) / chunks) + '% saved)';
+            else ui.loadBtn.textContent = 'Download & load model';
+        } catch (e) { /* Cache API unavailable */ }
+    }
+    ui.variant.addEventListener('change', showSavedProgress);
+
     ui.loadBtn.addEventListener('click', () => {
+        if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+        ui.variant.disabled = true;
         ui.loadBtn.disabled = true; ui.progress.hidden = false; ui.progress.value = 0;
         setLoadStatus('Starting…');
         ensureWorker().postMessage({ type: 'load', variant: ui.variant.value });
     });
     ui.clearBtn.addEventListener('click', async () => {
-        try { await caches.delete('bark-3.0-onnx-v1'); setLoadStatus('Cached model files deleted.'); }
+        try {
+            for (const k of await caches.keys()) if (k.startsWith('bark-')) await caches.delete(k);
+            setLoadStatus('Cached model files deleted.'); showSavedProgress();
+        }
         catch (e) { setLoadStatus('Could not clear cache: ' + e.message, true); }
     });
     ui.micBtn.addEventListener('click', () => (mic ? stopRecording() : startRecording()));
@@ -679,6 +740,7 @@ function downloadFile(content, filename, mimeType = 'text/plain') {
         setLoadStatus('This browser lacks WebAssembly, Web Workers or microphone support.', true);
         ui.loadBtn.disabled = true;
     }
+    showSavedProgress();
     window.__bark = { committed };   // handy for debugging in the console
     renderTranscript();
 })();
