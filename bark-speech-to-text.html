@@ -60,13 +60,11 @@
         <div class="row">
             <button id="loadBtn" class="primary">Download &amp; load model</button>
             <label class="chk">Precision
-                <select id="variant" aria-label="Model precision">
-                    <option value="quantized" selected>8-bit (~910 MB, most accurate)</option>
-                    <option value="q4f16">4-bit (~525 MB, slower; for phones / low memory)</option>
-                </select>
+                <select id="variant" aria-label="Model precision"></select>
             </label>
             <button id="clearBtn" title="Delete the cached model files from this browser">Clear cached model</button>
         </div>
+        <div id="variantNote" class="status"></div>
         <progress id="loadProgress" value="0" max="1" hidden></progress>
         <div id="loadStatus" class="status" role="status">The model is downloaded once and cached in your browser. If the download is interrupted, it picks up where it left off.</div>
     </section>
@@ -118,18 +116,6 @@ import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/o
 const ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
 const HF = 'https://huggingface.co/ai-ecoverse/Underdog-Bark-3.0-ONNX/resolve/31f3aba9ddbe2825ea96938ef91742ad4a12d691/';
 const CACHE_NAME = 'bark-3.0-onnx-v2';
-const VARIANTS = {
-    quantized: {
-        encoder: { path: 'onnx/encoder_model_quantized.onnx', size: 3272834 },
-        encoderData: { path: 'onnx/encoder_model_quantized.onnx_data', size: 838048256 },
-        decoder: { path: 'onnx/decoder_joint_model_quantized.onnx', size: 69895381 },
-    },
-    q4f16: {
-        encoder: { path: 'onnx/encoder_model_q4f16.onnx', size: 1288280 },
-        encoderData: { path: 'onnx/encoder_model_q4f16.onnx_data', size: 452846336 },
-        decoder: { path: 'onnx/decoder_joint_model_q4f16.onnx', size: 69895381 },
-    },
-};
 const BLANK = 8192, EOS = 3, HIDDEN = 640, LAYERS = 2, DURATIONS = [0, 1, 2, 3, 4];
 
 /* ---------- Mel front end (matches transformers' ParakeetFeatureExtractor) ---------- */
@@ -314,8 +300,7 @@ class BlobBackedBytes extends Uint8Array {
     }
 }
 
-async function loadModel(variant) {
-    const v = VARIANTS[variant];
+async function loadModel(v) {
     ort.env.wasm.wasmPaths = ORT_BASE;
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 4, 8) : 1;
 
@@ -403,7 +388,7 @@ async function transcribe(wave) {
 onmessage = async (e) => {
     const msg = e.data;
     try {
-        if (msg.type === 'load') await loadModel(msg.variant);
+        if (msg.type === 'load') await loadModel(msg.files);
         else if (msg.type === 'transcribe') {
             const t0 = performance.now();
             const text = await transcribe(msg.audio);
@@ -558,8 +543,35 @@ function downloadFile(content, filename, mimeType = 'text/plain') {
     const MIN_SPEECH_S = 0.3;
     const SPEECH_RMS = 0.012;        // frame RMS considered speech
 
+    /* Model variants from the ONNX export. The decoder is ~70 MB and identical in every variant except the
+       quantized ones. Sizes are exact so downloads can be split into ranges and verified. */
+    const onnx = (name, size) => ({ path: 'onnx/' + name, size });
+    const VARIANTS = {
+        q4f16: {
+            label: '4-bit (~525 MB): smallest, slower, slightly less accurate',
+            note: 'Smallest and lightest (about 1.1 GB of memory in testing). Best for phones and low-memory devices, but roughly twice as slow as 8-bit.',
+            files: { encoder: onnx('encoder_model_q4f16.onnx', 1288280), encoderData: onnx('encoder_model_q4f16.onnx_data', 452846336), decoder: onnx('decoder_joint_model_q4f16.onnx', 69895381) },
+        },
+        quantized: {
+            label: '8-bit (~910 MB): recommended',
+            note: 'Best balance of size, speed and accuracy. Needs about 1.2 GB of free memory.',
+            files: { encoder: onnx('encoder_model_quantized.onnx', 3272834), encoderData: onnx('encoder_model_quantized.onnx_data', 838048256), decoder: onnx('decoder_joint_model_quantized.onnx', 69895381) },
+        },
+        fp16: {
+            label: '16-bit (~1.3 GB): higher precision',
+            note: 'WebAssembly has no native 16-bit math, so this is the slowest option (about 4x slower than 8-bit) and still needs about 2.8 GB of memory. Usually 32-bit is the better choice. Desktop only.',
+            files: { encoder: onnx('encoder_model_fp16.onnx', 1237924), encoderData: onnx('encoder_model_fp16.onnx_data', 1219511040), decoder: onnx('decoder_joint_model_fp16.onnx', 69895381) },
+        },
+        fp32: {
+            label: '32-bit (~2.5 GB): full precision',
+            note: 'The original weights: most accurate and about 2x slower than 8-bit. The largest download, needing about 3.5 GB of memory, so use a desktop browser with plenty of RAM. Turn off live preview for long speech.',
+            files: { encoder: onnx('encoder_model.onnx', 845252), encoderData: onnx('encoder_model.onnx_data', 2438044160), decoder: onnx('decoder_joint_model.onnx', 69895381) },
+        },
+    };
+    const CHUNK_BYTES = 16 * 1048576;   // must match CHUNK in the worker
+
     const ui = {
-        loadBtn: $('loadBtn'), clearBtn: $('clearBtn'), variant: $('variant'), progress: $('loadProgress'),
+        loadBtn: $('loadBtn'), clearBtn: $('clearBtn'), variant: $('variant'), variantNote: $('variantNote'), progress: $('loadProgress'),
         loadStatus: $('loadStatus'), micBtn: $('micBtn'), fileBtn: $('fileBtn'), fileInput: $('fileInput'),
         liveChk: $('liveChk'), level: $('level'), runStatus: $('runStatus'), transcript: $('transcript'),
         copyBtn: $('copyBtn'), downloadBtn: $('downloadBtn'), resetBtn: $('resetBtn')
@@ -758,15 +770,17 @@ function downloadFile(content, filename, mimeType = 'text/plain') {
         || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
         || (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform))   // iPadOS pretends to be a Mac
         || (navigator.deviceMemory && navigator.deviceMemory < 4);
-    if (isMobile) ui.variant.value = 'q4f16';
+    for (const [id, v] of Object.entries(VARIANTS)) ui.variant.add(new Option(v.label, id));
+    ui.variant.value = isMobile ? 'q4f16' : 'quantized';
 
     /** Show how much of the selected model is already in the cache, so an interrupted download reads as "Resume". */
     async function showSavedProgress() {
         try {
+            ui.variantNote.textContent = VARIANTS[ui.variant.value].note;
             const cache = await caches.open('bark-3.0-onnx-v2');
-            const v = ui.variant.value;
-            const n = (await cache.keys()).filter(r => r.url.includes('_' + v + '.onnx_data?chunk=')).length;
-            const chunks = { quantized: 50, q4f16: 27 }[v];
+            const weights = VARIANTS[ui.variant.value].files.encoderData;
+            const n = (await cache.keys()).filter(r => r.url.includes(weights.path + '?chunk=')).length;
+            const chunks = Math.ceil(weights.size / CHUNK_BYTES);
             if (n >= chunks) ui.loadBtn.textContent = 'Load model (downloaded)';
             else if (n) ui.loadBtn.textContent = 'Resume download (' + Math.round((100 * n) / chunks) + '% saved)';
             else ui.loadBtn.textContent = 'Download & load model';
@@ -779,7 +793,7 @@ function downloadFile(content, filename, mimeType = 'text/plain') {
         ui.variant.disabled = true;
         ui.loadBtn.disabled = true; ui.progress.hidden = false; ui.progress.value = 0;
         setLoadStatus('Starting…');
-        ensureWorker().postMessage({ type: 'load', variant: ui.variant.value });
+        ensureWorker().postMessage({ type: 'load', files: VARIANTS[ui.variant.value].files });
     });
     ui.clearBtn.addEventListener('click', async () => {
         try {
