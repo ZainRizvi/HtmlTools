@@ -1,0 +1,2705 @@
+<!doctype html>
+<!-- Generated file. Source: the TypeScript PDF reader in https://github.com/ZainRizvi/staticize (examples/reader),
+     bundled into this one file with pdf.js loaded from a version-pinned jsDelivr URL. Edit the source, not this file. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Reader</title>
+<meta name="description" content="Open PDFs in tabs, search them, highlight text and keep notes. Everything stays in your browser; Readwise sync is optional.">
+<style>
+:root {
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --toolbar-h: 44px;
+  --panel-w: 260px;
+}
+
+.app[data-theme="light"], .app:not([data-theme]) {
+  --bg: #f4f5f7; --surface: #ffffff; --surface-2: #eceef2; --text: #1d2330; --muted: #6a7385; --border: #d6dae2;
+  --accent: #2563eb; --desk: #dfe2e8; --page-filter: none;
+}
+.app[data-theme="dark"] {
+  --bg: #14171d; --surface: #1d2129; --surface-2: #272c36; --text: #e4e7ee; --muted: #929bad; --border: #343a47;
+  --accent: #6ea0ff; --desk: #0e1014; --page-filter: invert(0.9) hue-rotate(180deg);
+}
+.app[data-theme="sepia"] {
+  --bg: #efe5d0; --surface: #f8f0de; --surface-2: #e8dcc2; --text: #4a3b27; --muted: #8a7757; --border: #d3c3a0;
+  --accent: #a0522d; --desk: #d9cba9; --page-filter: sepia(0.45) brightness(0.97);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { font-family: var(--font); font-size: 14px; }
+
+.app {
+  display: flex; flex-direction: column; height: 100vh;
+  background: var(--bg); color: var(--text);
+}
+.app.dragging::after {
+  content: "Drop PDF to open"; position: fixed; inset: 0; display: grid; place-items: center;
+  background: rgba(37, 99, 235, 0.15); border: 3px dashed var(--accent); font-size: 28px; pointer-events: none; z-index: 50;
+}
+
+button, select, input, textarea { font: inherit; color: inherit; }
+button {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; cursor: pointer;
+}
+button:hover { background: var(--surface-2); }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.danger { color: #c0392b; }
+input, select, textarea { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+
+.toolbar {
+  display: flex; align-items: center; gap: 6px; padding: 0 10px; height: var(--toolbar-h);
+  background: var(--surface); border-bottom: 1px solid var(--border); flex: none;
+}
+.toolbar .spacer { width: 14px; }
+.zoom-label { min-width: 4ch; text-align: center; }
+.page-input { text-align: right; }
+
+.tab-bar { display: flex; gap: 2px; padding: 4px 8px 0; background: var(--surface-2); overflow-x: auto; flex: none; }
+.tab-bar:empty { display: none; }
+.tab { display: flex; align-items: center; max-width: 220px; background: var(--bg); border: 1px solid var(--border); border-bottom: none; border-radius: 6px 6px 0 0; }
+.tab.active { background: var(--surface); font-weight: 600; }
+.tab-error .tab-label { color: #c0392b; }
+.tab-label { border: none; background: none; padding: 6px 4px 6px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+.tab-close { border: none; background: none; padding: 2px 8px; color: var(--muted); }
+
+.workspace { flex: 1; min-height: 0; position: relative; }
+.tab-pane { position: absolute; inset: 0; }
+.tab-pane[hidden] { display: none; }
+.empty-state { flex: 1; display: grid; place-content: center; text-align: center; color: var(--muted); }
+.error-view { padding: 48px; text-align: center; color: var(--muted); }
+.error-view h2 { color: #c0392b; }
+
+.pane { display: flex; height: 100%; }
+.panel { display: none; flex-direction: column; width: var(--panel-w); flex: none; background: var(--surface); overflow-y: auto; padding: 8px; }
+.panel-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 4px 4px 8px; }
+.app[data-left="outline"] .outline-panel,
+.app[data-left="thumbnails"] .thumbnails-panel { display: flex; border-right: 1px solid var(--border); }
+.app[data-notes="open"] .notes-panel { display: flex; border-left: 1px solid var(--border); width: 320px; }
+.empty { color: var(--muted); margin: 8px 4px; }
+
+.reader { flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column; }
+.search-bar { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.search-bar[hidden] { display: none; }
+.search-input { flex: 1; max-width: 360px; }
+.search-count { color: var(--muted); min-width: 8ch; }
+
+.scroller { flex: 1; overflow: auto; background: var(--desk); outline: none; position: relative; }
+.pages { position: relative; margin: 0 auto; }
+.page { position: absolute; background: #fff; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25); }
+.page canvas { display: block; width: 100%; height: 100%; filter: var(--page-filter); }
+.page.render-failed::after { content: "This page could not be drawn."; position: absolute; inset: 0; display: grid; place-items: center; color: #c0392b; }
+.layer { position: absolute; inset: 0; pointer-events: none; }
+.mark { position: absolute; border-radius: 2px; }
+.highlight-layer { mix-blend-mode: multiply; }
+.app[data-theme="dark"] .highlight-layer { mix-blend-mode: screen; }
+.mark-yellow { background: rgba(255, 220, 0, 0.45); }
+.mark-green { background: rgba(80, 200, 90, 0.4); }
+.mark-blue { background: rgba(70, 150, 255, 0.38); }
+.mark-pink { background: rgba(255, 90, 170, 0.38); }
+.search-hit { background: rgba(255, 150, 0, 0.35); outline: 1px solid rgba(255, 150, 0, 0.8); }
+.search-hit-active { background: rgba(255, 90, 0, 0.5); outline: 2px solid #ff5a00; }
+
+.textLayer {
+  position: absolute; inset: 0; overflow: clip; line-height: 1; text-align: initial; transform-origin: 0 0;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+.textLayer :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0%; user-select: text; }
+.textLayer > :not(.markedContent), .textLayer .markedContent span:not(.markedContent) {
+  --font-height: 0; font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1; --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+.textLayer .markedContent { display: contents; }
+.textLayer ::selection { background: rgba(0, 90, 255, 0.3); }
+
+.floating { position: fixed; z-index: 30; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25); padding: 6px; }
+.floating[hidden] { display: none; }
+.highlight-editor { width: 240px; display: flex; flex-direction: column; gap: 6px; }
+.swatches { display: flex; gap: 6px; }
+.swatch { width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 2px solid transparent; }
+.swatch.selected { border-color: var(--text); }
+.swatch-yellow { background: #ffd800; } .swatch-green { background: #50c85a; }
+.swatch-blue { background: #4696ff; } .swatch-pink { background: #ff5aaa; }
+
+.note-input { width: 100%; min-height: 56px; resize: vertical; }
+.notes-panel .panel-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.sync-status { color: var(--muted); margin: 0 4px 8px; min-height: 1em; }
+.notes-list { display: flex; flex-direction: column; gap: 8px; }
+.note-card { border: 1px solid var(--border); border-left-width: 5px; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px; background: var(--bg); }
+.note-yellow { border-left-color: #ffd800; } .note-green { border-left-color: #50c85a; }
+.note-blue { border-left-color: #4696ff; } .note-pink { border-left-color: #ff5aaa; }
+.note-page { align-self: flex-start; font-size: 12px; padding: 1px 8px; }
+.note-quote { margin: 0; font-style: italic; color: var(--muted); }
+
+.outline-level { list-style: none; margin: 0; padding-left: 14px; }
+.outline-tree > .outline-level { padding-left: 0; }
+.outline-level[hidden] { display: none; }
+.outline-row { display: flex; align-items: baseline; }
+.outline-toggle { width: 20px; padding: 0; border: none; background: none; color: var(--muted); flex: none; }
+.outline-title { border: none; background: none; text-align: left; padding: 2px 4px; }
+
+.thumbnail-list { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.thumbnail { position: relative; padding: 0; background: #fff; border: 2px solid var(--border); overflow: hidden; }
+.thumbnail.current { border-color: var(--accent); }
+.thumbnail canvas { display: block; width: 100%; height: 100%; filter: var(--page-filter); }
+.thumbnail-label { position: absolute; bottom: 2px; right: 4px; font-size: 11px; background: rgba(0, 0, 0, 0.55); color: #fff; border-radius: 4px; padding: 0 5px; z-index: 1; }
+
+.dialog-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); display: grid; place-items: center; z-index: 40; }
+.dialog-backdrop[hidden] { display: none; }
+.dialog { background: var(--surface); border-radius: 10px; padding: 20px; width: 340px; display: flex; flex-direction: column; gap: 12px; }
+.dialog h2 { margin: 0; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field-label { color: var(--muted); font-size: 12px; }
+
+[hidden] { display: none !important; }
+/*$vite$:1*/
+</style>
+</head>
+<body>
+<script type="module">
+import { GlobalWorkerOptions, RenderingCancelledException, TextLayer, getDocument } from "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.5.438/build/pdf.min.mjs";
+// src/adapters/indexeddb-store.ts
+var DATABASE_NAME = "staticize-example-reader";
+var DATABASE_VERSION = 1;
+var STORE_NAMES = [
+	"documents",
+	"viewState",
+	"highlights",
+	"session",
+	"settings"
+];
+function settle(request) {
+	return new Promise((resolve, reject) => {
+		request.addEventListener("success", () => {
+			resolve(request.result);
+		});
+		request.addEventListener("error", () => {
+			reject(request.error ?? /* @__PURE__ */ new Error("IndexedDB request failed"));
+		});
+	});
+}
+function openDatabase() {
+	const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
+	request.addEventListener("upgradeneeded", () => {
+		for (const name of STORE_NAMES) if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name);
+	});
+	return settle(request);
+}
+var IndexedDbKeyValueStore = class {
+	database = null;
+	async read(store, key) {
+		return settle((await this.open()).transaction(store, "readonly").objectStore(store).get(key));
+	}
+	async write(store, key, value) {
+		await settle((await this.open()).transaction(store, "readwrite").objectStore(store).put(value, key));
+	}
+	async remove(store, key) {
+		await settle((await this.open()).transaction(store, "readwrite").objectStore(store).delete(key));
+	}
+	open() {
+		this.database ??= openDatabase();
+		return this.database;
+	}
+};
+// src/sync/readwise.ts
+var SyncError = class extends Error {
+	constructor(message) {
+		super(message);
+		this.name = "SyncError";
+	}
+};
+var SOURCE_TYPE = "staticize-example-reader";
+var LOCATION_TYPE = "page";
+function needsSync(highlight) {
+	return highlight.syncedAt === null || highlight.syncedAt < highlight.updatedAt;
+}
+function toReadwiseHighlight(title, highlight) {
+	return {
+		text: highlight.text,
+		title,
+		source_type: SOURCE_TYPE,
+		note: highlight.note,
+		location: highlight.page + 1,
+		location_type: LOCATION_TYPE,
+		highlighted_at: new Date(highlight.createdAt).toISOString()
+	};
+}
+var ReadwiseSync = class {
+	transport;
+	constructor(transport) {
+		this.transport = transport;
+	}
+	async sync(token, title, highlights) {
+		if (!token.trim()) throw new SyncError("Add a Readwise token in Settings first.");
+		const pending = highlights.filter((h) => needsSync(h) && h.text.trim());
+		if (pending.length === 0) return { sentIds: [] };
+		await this.transport.postHighlights(token.trim(), pending.map((h) => toReadwiseHighlight(title, h)));
+		return { sentIds: pending.map((h) => h.id) };
+	}
+};
+// src/adapters/readwise-http.ts
+/**
+* Posts highlights to the Readwise HTTP API.
+* @external Readwise API (HTTPS): receives highlights and notes the reader sends from the notes panel
+*/
+var READWISE_HIGHLIGHTS_URL = "https://readwise.io/api/v2/highlights/";
+var ReadwiseHttpTransport = class {
+	async postHighlights(token, highlights) {
+		let response;
+		try {
+			response = await fetch(READWISE_HIGHLIGHTS_URL, {
+				method: "POST",
+				headers: {
+					Authorization: `Token ${token}`,
+					"Content-Type": "application/json"
+				},
+				body: JSON.stringify({ highlights })
+			});
+		} catch {
+			throw new SyncError("Could not reach Readwise. Check your connection.");
+		}
+		if (!response.ok) throw new SyncError(`Readwise refused the highlights (HTTP ${String(response.status)}).`);
+	}
+};
+// src/pdf/pdfjs-engine.ts
+/**
+* Implements the PDF engine interface with pdf.js: opening, rendering, text extraction and outlines.
+*/
+var WORKER_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.5.438/build/pdf.worker.min.mjs";
+var TOTAL_SCALE_PROPERTY = "--total-scale-factor";
+var MATRIX_LENGTH = 6;
+var PdfOpenError = class extends Error {
+	constructor(message) {
+		super(message);
+		this.name = "PdfOpenError";
+	}
+};
+function describeOpenFailure(error) {
+	if (error instanceof Error && error.name === "PasswordException") return "This PDF is password protected.";
+	if (error instanceof Error && error.name === "InvalidPDFException") return "This file is not a valid PDF, or it is damaged.";
+	if (error instanceof Error && error.message) return `Could not open this PDF: ${error.message}`;
+	return "Could not open this PDF.";
+}
+function matrixOf(value) {
+	if (!Array.isArray(value) || value.length < MATRIX_LENGTH) return null;
+	const numbers = [];
+	for (const entry of value) {
+		if (typeof entry !== "number") return null;
+		numbers.push(entry);
+	}
+	return numbers;
+}
+function pointOf(value) {
+	const [x, y] = Array.isArray(value) ? value : [];
+	return {
+		x: typeof x === "number" ? x : 0,
+		y: typeof y === "number" ? y : 0
+	};
+}
+function isOutlineItem(value) {
+	return typeof value === "object" && value !== null && "title" in value && typeof value.title === "string" && "dest" in value && (value.dest === null || typeof value.dest === "string" || Array.isArray(value.dest)) && "items" in value && Array.isArray(value.items);
+}
+function isRefProxy(value) {
+	return typeof value === "object" && value !== null && "num" in value && typeof value.num === "number" && "gen" in value && typeof value.gen === "number";
+}
+function cancellable(run) {
+	const task = run();
+	return {
+		done: task.promise.then(() => void 0, (error) => {
+			if (error instanceof RenderingCancelledException) return;
+			throw error;
+		}),
+		cancel: () => {
+			task.cancel();
+		}
+	};
+}
+var PdfJsDocument = class {
+	id;
+	pdf;
+	task;
+	pageCount;
+	constructor(id, pdf, task) {
+		this.id = id;
+		this.pdf = pdf;
+		this.task = task;
+		this.pageCount = pdf.numPages;
+	}
+	async pageSizes() {
+		const sizes = [];
+		for (let index = 0; index < this.pageCount; index++) {
+			const page = await this.pdf.getPage(index + 1);
+			const viewport = page.getViewport({ scale: 1 });
+			sizes.push({
+				width: viewport.width,
+				height: viewport.height
+			});
+			page.cleanup();
+		}
+		return sizes;
+	}
+	renderPage(pageIndex, scale, canvas) {
+		const pixelRatio = window.devicePixelRatio;
+		const pagePromise = this.pdf.getPage(pageIndex + 1);
+		let cancelRender = () => void 0;
+		let cancelled = false;
+		return {
+			done: pagePromise.then(async (page) => {
+				if (cancelled) return;
+				const viewport = page.getViewport({ scale: scale * pixelRatio });
+				canvas.width = Math.floor(viewport.width);
+				canvas.height = Math.floor(viewport.height);
+				const job = cancellable(() => page.render({
+					canvas,
+					viewport
+				}));
+				cancelRender = () => {
+					job.cancel();
+				};
+				await job.done;
+			}),
+			cancel: () => {
+				cancelled = true;
+				cancelRender();
+			}
+		};
+	}
+	renderTextLayer(pageIndex, scale, container) {
+		let cancelLayer = () => void 0;
+		let cancelled = false;
+		return {
+			done: this.pdf.getPage(pageIndex + 1).then(async (page) => {
+				if (cancelled) return;
+				const viewport = page.getViewport({ scale });
+				container.replaceChildren();
+				container.style.setProperty(TOTAL_SCALE_PROPERTY, String(scale));
+				const layer = new TextLayer({
+					textContentSource: page.streamTextContent(),
+					container,
+					viewport
+				});
+				cancelLayer = () => {
+					layer.cancel();
+				};
+				await layer.render();
+			}),
+			cancel: () => {
+				cancelled = true;
+				cancelLayer();
+			}
+		};
+	}
+	async pageText(pageIndex) {
+		const page = await this.pdf.getPage(pageIndex + 1);
+		const viewport = page.getViewport({ scale: 1 });
+		const content = await page.getTextContent();
+		const runs = [];
+		for (const item of content.items) {
+			if (!("str" in item)) continue;
+			const matrix = matrixOf(item.transform);
+			const run = matrix ? this.toRun(item.str, item.width, item.height, item.hasEOL, matrix, viewport) : null;
+			if (run) runs.push(run);
+		}
+		page.cleanup();
+		return runs;
+	}
+	toRun(text, width, height, endsLine, matrix, viewport) {
+		const [a = 0, b = 0, , , e = 0, f = 0] = matrix;
+		const length = Math.hypot(a, b);
+		if (length === 0) return null;
+		const ux = a / length;
+		const uy = b / length;
+		const toPoint = (x, y) => {
+			return pointOf(viewport.convertToViewportPoint(x, y));
+		};
+		const start = toPoint(e, f);
+		const end = toPoint(e + ux * width, f + uy * width);
+		const top = toPoint(e - uy * height, f + ux * height);
+		return {
+			text,
+			start,
+			end,
+			up: {
+				x: top.x - start.x,
+				y: top.y - start.y
+			},
+			endsLine
+		};
+	}
+	async outline() {
+		const nodes = await this.pdf.getOutline();
+		return this.toOutlineNodes(nodes);
+	}
+	toOutlineNodes(items) {
+		return Promise.all(items.filter(isOutlineItem).map((item) => this.toOutlineNode(item)));
+	}
+	async toOutlineNode(item) {
+		const children = await this.toOutlineNodes(item.items);
+		return {
+			title: item.title,
+			page: await this.resolvePage(item.dest),
+			children
+		};
+	}
+	async resolvePage(dest) {
+		try {
+			const target = (typeof dest === "string" ? await this.pdf.getDestination(dest) : dest)?.[0];
+			if (typeof target === "number") return target;
+			return isRefProxy(target) ? await this.pdf.getPageIndex(target) : null;
+		} catch {
+			return null;
+		}
+	}
+	async destroy() {
+		await this.task.destroy();
+	}
+};
+var PdfJsEngine = class {
+	constructor() {
+		GlobalWorkerOptions.workerSrc = WORKER_URL;
+	}
+	async open(bytes) {
+		try {
+			const task = getDocument({ data: bytes.slice() });
+			const pdf = await task.promise;
+			const id = pdf.fingerprints[0];
+			if (!id) throw new PdfOpenError("The PDF has no identity.");
+			return new PdfJsDocument(id, pdf, task);
+		} catch (error) {
+			throw new PdfOpenError(describeOpenFailure(error));
+		}
+	}
+};
+// src/pdf/render-cache.ts
+/**
+* A least-recently-used cache holding rendered page canvases so scrolling back to a page is instant.
+*/
+var RenderCache = class {
+	capacity;
+	onEvict;
+	entries = /* @__PURE__ */ new Map();
+	constructor(capacity, onEvict) {
+		this.capacity = capacity;
+		this.onEvict = onEvict;
+	}
+	get size() {
+		return this.entries.size;
+	}
+	take(key) {
+		const value = this.entries.get(key);
+		if (value !== void 0) this.entries.delete(key);
+		return value;
+	}
+	put(key, value) {
+		const previous = this.entries.get(key);
+		if (previous !== void 0) this.onEvict(previous);
+		this.entries.delete(key);
+		this.entries.set(key, value);
+		this.evictOverflow();
+	}
+	clear() {
+		for (const value of this.entries.values()) this.onEvict(value);
+		this.entries.clear();
+	}
+	evictOverflow() {
+		while (this.entries.size > this.capacity) {
+			const oldest = this.entries.entries().next();
+			if (oldest.done) return;
+			const [key, value] = oldest.value;
+			this.entries.delete(key);
+			this.onEvict(value);
+		}
+	}
+};
+// src/geometry/rect.ts
+var MIN_RECT_SIDE_PX = 1;
+var SAME_LINE_OVERLAP = .5;
+var SAME_LINE_GAP_PX = 3;
+function height(rect) {
+	return rect.bottom - rect.top;
+}
+function width(rect) {
+	return rect.right - rect.left;
+}
+function contains(outer, inner) {
+	return outer.left <= inner.left && outer.top <= inner.top && outer.right >= inner.right && outer.bottom >= inner.bottom;
+}
+function verticalOverlap(a, b) {
+	return (Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)) / Math.min(height(a), height(b));
+}
+function isSameLine(a, b) {
+	const gap = Math.max(a.left, b.left) - Math.min(a.right, b.right);
+	return verticalOverlap(a, b) >= SAME_LINE_OVERLAP && gap <= SAME_LINE_GAP_PX;
+}
+function union(a, b) {
+	return {
+		left: Math.min(a.left, b.left),
+		top: Math.min(a.top, b.top),
+		right: Math.max(a.right, b.right),
+		bottom: Math.max(a.bottom, b.bottom)
+	};
+}
+/** Drops degenerate and nested rectangles, then joins neighbours on the same text line. */
+function mergeLineRects(rects) {
+	const solid = rects.filter((r) => width(r) >= MIN_RECT_SIDE_PX && height(r) >= MIN_RECT_SIDE_PX);
+	const ordered = [...solid.filter((r, i) => !solid.some((o, j) => j !== i && contains(o, r) && (!contains(r, o) || j < i)))].sort((a, b) => a.top - b.top || a.left - b.left);
+	const merged = [];
+	for (const rect of ordered) {
+		const index = merged.findIndex((m) => isSameLine(m, rect));
+		const existing = merged[index];
+		if (existing === void 0) merged.push(rect);
+		else merged[index] = union(existing, rect);
+	}
+	return merged;
+}
+function toNormRect(rect, page) {
+	return {
+		x: (rect.left - page.left) / width(page),
+		y: (rect.top - page.top) / height(page),
+		w: width(rect) / width(page),
+		h: height(rect) / height(page)
+	};
+}
+function containsPoint(rect, x, y) {
+	return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
+}
+function isNormRect(value) {
+	return typeof value === "object" && value !== null && "x" in value && typeof value.x === "number" && "y" in value && typeof value.y === "number" && "w" in value && typeof value.w === "number" && "h" in value && typeof value.h === "number";
+}
+// src/ui/dom.ts
+function el(tag, className = "", children = []) {
+	const node = document.createElement(tag);
+	if (className) node.className = className;
+	node.append(...children);
+	return node;
+}
+function button(spec) {
+	const node = el("button", spec.className ?? "", [spec.label]);
+	node.type = "button";
+	node.title = spec.title;
+	node.addEventListener("click", spec.onClick);
+	return node;
+}
+function clear(node) {
+	node.replaceChildren();
+}
+function isEditableTarget(target) {
+	return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target instanceof HTMLElement && target.isContentEditable;
+}
+// src/ui/shortcuts.ts
+var ZOOM_IN_KEYS = ["+", "="];
+var ZOOM_OUT_KEYS = ["-", "_"];
+function resolvePlainKey(press) {
+	if (press.typing || press.alt) return null;
+	if (ZOOM_IN_KEYS.includes(press.key)) return "zoom-in";
+	if (ZOOM_OUT_KEYS.includes(press.key)) return "zoom-out";
+	if (press.key === "0") return "fit-width";
+	if (press.key === "F3") return press.shift ? "search-previous" : "search-next";
+	return null;
+}
+function resolveAltKey(press) {
+	switch (press.code) {
+		case "Digit1": return "toggle-outline";
+		case "Digit2": return "toggle-thumbnails";
+		case "Digit3": return "toggle-notes";
+		default: return null;
+	}
+}
+function resolveModifiedKey(press) {
+	const key = press.key.toLowerCase();
+	if (key === "o") return "open-file";
+	if (key === "f") return "search";
+	if (key === "g") return press.shift ? "search-previous" : "search-next";
+	if (key === "w") return "close-tab";
+	if (ZOOM_IN_KEYS.includes(key)) return "zoom-in";
+	if (ZOOM_OUT_KEYS.includes(key)) return "zoom-out";
+	if (key === "0") return "fit-width";
+	if (press.key === "PageDown") return "next-tab";
+	if (press.key === "PageUp") return "previous-tab";
+	return null;
+}
+function resolveShortcut(press) {
+	const modified = press.ctrl || press.meta;
+	if (press.alt && !modified) return resolveAltKey(press);
+	if (modified) return resolveModifiedKey(press);
+	return resolvePlainKey(press);
+}
+// src/ui/download.ts
+/**
+* Hands a generated text file to the user as a download.
+*/
+function downloadText(fileName, mimeType, content) {
+	const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
+	const link = document.createElement("a");
+	link.href = url;
+	link.download = fileName;
+	document.body.append(link);
+	link.click();
+	link.remove();
+	window.setTimeout(() => {
+		URL.revokeObjectURL(url);
+	}, 0);
+}
+var CURRENT_PAGE_VIEWPORT_FRACTION = .33;
+function computeLayout(sizes, scale) {
+	const tops = [];
+	const widths = [];
+	const heights = [];
+	let y = 16;
+	for (const size of sizes) {
+		tops.push(y);
+		widths.push(size.width * scale);
+		heights.push(size.height * scale);
+		y += size.height * scale + 12;
+	}
+	return {
+		tops,
+		widths,
+		heights,
+		totalHeight: y - 12 + 16,
+		contentWidth: Math.max(0, ...widths)
+	};
+}
+/** Index of the last page whose top is at or above `y` (0 when above all pages). */
+function pageAtOffset(layout, y) {
+	let low = 0;
+	let high = layout.tops.length - 1;
+	while (low < high) {
+		const mid = Math.ceil((low + high) / 2);
+		if ((layout.tops[mid] ?? Infinity) <= y) low = mid;
+		else high = mid - 1;
+	}
+	return low;
+}
+function visibleRange(layout, scrollTop, viewportHeight, bufferPx = 0) {
+	return {
+		first: pageAtOffset(layout, scrollTop - bufferPx),
+		last: pageAtOffset(layout, scrollTop + viewportHeight + bufferPx)
+	};
+}
+function currentPage(layout, scrollTop, viewportHeight) {
+	return pageAtOffset(layout, scrollTop + viewportHeight * CURRENT_PAGE_VIEWPORT_FRACTION);
+}
+function scrollTopToPosition(layout, scrollTop) {
+	const page = pageAtOffset(layout, scrollTop);
+	const top = layout.tops[page] ?? 0;
+	const height = layout.heights[page] ?? 1;
+	return {
+		page,
+		offset: Math.min(1, Math.max(0, (scrollTop - top) / height))
+	};
+}
+function positionToScrollTop(layout, position) {
+	const page = Math.min(Math.max(position.page, 0), layout.tops.length - 1);
+	return (layout.tops[page] ?? 0) + (layout.heights[page] ?? 0) * position.offset;
+}
+function isViewPosition(value) {
+	return typeof value === "object" && value !== null && "page" in value && typeof value.page === "number" && "offset" in value && typeof value.offset === "number";
+}
+// src/viewer/page-view.ts
+var PERCENT$1 = 100;
+function cacheKey(page, scale) {
+	return `${String(page)}@${String(scale)}`;
+}
+function placeRect(node, rect) {
+	node.style.left = `${String(rect.x * PERCENT$1)}%`;
+	node.style.top = `${String(rect.y * PERCENT$1)}%`;
+	node.style.width = `${String(rect.w * PERCENT$1)}%`;
+	node.style.height = `${String(rect.h * PERCENT$1)}%`;
+}
+var PageView = class {
+	index;
+	doc;
+	cache;
+	element = el("div", "page");
+	highlightLayer = el("div", "layer highlight-layer");
+	searchLayer = el("div", "layer search-layer");
+	textLayer = el("div", "textLayer");
+	canvas = null;
+	paintedScale = 0;
+	paintJob = null;
+	textScale = 0;
+	textJob = null;
+	constructor(index, doc, cache) {
+		this.index = index;
+		this.doc = doc;
+		this.cache = cache;
+		this.element.dataset["page"] = String(index);
+		this.element.append(this.highlightLayer, this.searchLayer, this.textLayer);
+	}
+	place(left, top, width, height) {
+		const style = this.element.style;
+		style.left = `${String(left)}px`;
+		style.top = `${String(top)}px`;
+		style.width = `${String(width)}px`;
+		style.height = `${String(height)}px`;
+	}
+	get isActive() {
+		return this.canvas !== null || this.paintJob !== null;
+	}
+	activate(scale) {
+		if (this.paintedScale !== scale) this.paint(scale);
+		if (this.textScale !== scale) this.paintText(scale);
+	}
+	deactivate() {
+		this.paintJob?.cancel();
+		this.paintJob = null;
+		this.textJob?.cancel();
+		this.textJob = null;
+		if (this.canvas) {
+			this.cache.put(cacheKey(this.index, this.paintedScale), this.canvas);
+			this.canvas.remove();
+		}
+		this.canvas = null;
+		this.paintedScale = 0;
+		this.textScale = 0;
+		clear(this.textLayer);
+	}
+	setHighlights(highlights) {
+		clear(this.highlightLayer);
+		for (const highlight of highlights) for (const rect of highlight.rects) {
+			const mark = el("div", `mark mark-${highlight.color}`);
+			mark.dataset["highlight"] = highlight.id;
+			placeRect(mark, rect);
+			this.highlightLayer.append(mark);
+		}
+	}
+	setSearchMarks(marks) {
+		clear(this.searchLayer);
+		for (const mark of marks) for (const rect of mark.rects) {
+			const node = el("div", mark.active ? "mark search-hit search-hit-active" : "mark search-hit");
+			placeRect(node, rect);
+			this.searchLayer.append(node);
+		}
+	}
+	paint(scale) {
+		this.paintJob?.cancel();
+		const key = cacheKey(this.index, scale);
+		const cached = this.cache.take(key);
+		if (cached) {
+			this.mount(cached, scale);
+			return;
+		}
+		const canvas = document.createElement("canvas");
+		const job = this.doc.renderPage(this.index, scale, canvas);
+		this.paintJob = job;
+		job.done.then(() => {
+			if (this.paintJob !== job) return;
+			this.paintJob = null;
+			this.mount(canvas, scale);
+		}, () => {
+			if (this.paintJob === job) this.element.classList.add("render-failed");
+		});
+	}
+	mount(canvas, scale) {
+		this.canvas?.remove();
+		this.canvas = canvas;
+		this.paintedScale = scale;
+		this.element.classList.remove("render-failed");
+		this.element.prepend(canvas);
+	}
+	paintText(scale) {
+		this.textJob?.cancel();
+		const job = this.doc.renderTextLayer(this.index, scale, this.textLayer);
+		this.textJob = job;
+		this.textScale = scale;
+		job.done.catch(() => {
+			if (this.textJob === job) this.textScale = 0;
+		});
+	}
+};
+// src/viewer/zoom.ts
+var ZOOM_STEPS = [
+	.5,
+	.75,
+	1,
+	1.25,
+	1.5,
+	2,
+	3,
+	4
+];
+var MIN_SCALE = .25;
+var PERCENT = 100;
+function clampScale(scale) {
+	return Math.min(5, Math.max(MIN_SCALE, scale));
+}
+function resolveScale(setting, availableWidth, widestPage) {
+	if (setting !== "fit-width") return clampScale(setting);
+	if (widestPage <= 0 || availableWidth <= 0) return 1;
+	return clampScale(availableWidth / widestPage);
+}
+function zoomedIn(scale) {
+	return ZOOM_STEPS.find((step) => step > scale + 1e-6) ?? 5;
+}
+function zoomedOut(scale) {
+	return [...ZOOM_STEPS].reverse().find((step) => step < scale - 1e-6) ?? .25;
+}
+function formatZoom(scale) {
+	return `${String(Math.round(scale * PERCENT))}%`;
+}
+function isZoomSetting(value) {
+	return value === "fit-width" || typeof value === "number" && value >= .25 && value <= 5;
+}
+// src/viewer/document-view.ts
+/**
+* The continuous vertical scroll view of one document: layout, lazy page rendering, zoom and overlays.
+*/
+var CACHED_CANVASES = 8;
+var PRERENDER_VIEWPORTS = 1;
+var SCROLL_TARGET_FRACTION = .3;
+var SCALE_EPSILON = 1e-6;
+var DocumentView = class {
+	doc;
+	sizes;
+	zoom;
+	element = el("div", "scroller");
+	surface = el("div", "pages");
+	pages;
+	cache = new RenderCache(CACHED_CANVASES, (canvas) => {
+		canvas.width = 0;
+		canvas.height = 0;
+	});
+	listeners = [];
+	active = /* @__PURE__ */ new Set();
+	layout;
+	scale = 0;
+	lastPage = -1;
+	highlightsByPage = /* @__PURE__ */ new Map();
+	searchPages = /* @__PURE__ */ new Set();
+	frame = 0;
+	resizeObserver = new ResizeObserver(() => {
+		this.handleResize();
+	});
+	lastWidth = 0;
+	pendingPosition = null;
+	constructor(doc, sizes, zoom) {
+		this.doc = doc;
+		this.sizes = sizes;
+		this.zoom = zoom;
+		this.element.tabIndex = 0;
+		this.layout = computeLayout(sizes, 1);
+		this.pages = sizes.map((_, index) => new PageView(index, doc, this.cache));
+		this.surface.append(...this.pages.map((page) => page.element));
+		this.element.append(this.surface);
+		this.element.addEventListener("scroll", () => {
+			this.scheduleUpdate();
+		});
+		this.element.addEventListener("click", (event) => {
+			this.handleClick(event);
+		});
+		this.resizeObserver.observe(this.element);
+	}
+	dispose() {
+		this.resizeObserver.disconnect();
+		cancelAnimationFrame(this.frame);
+		this.frame = 0;
+	}
+	addListener(listener) {
+		this.listeners.push(listener);
+	}
+	get zoomSetting() {
+		return this.zoom;
+	}
+	get pageElements() {
+		return this.pages.map((page) => page.element);
+	}
+	position() {
+		return scrollTopToPosition(this.layout, this.element.scrollTop);
+	}
+	restore(position) {
+		if (this.scale > 0) this.element.scrollTop = positionToScrollTop(this.layout, position);
+		else {
+			this.pendingPosition = position;
+			this.rescale();
+		}
+		this.update();
+	}
+	setZoom(setting) {
+		this.zoom = setting;
+		this.rescale();
+	}
+	zoomIn() {
+		this.setZoom(zoomedIn(this.scale));
+	}
+	zoomOut() {
+		this.setZoom(zoomedOut(this.scale));
+	}
+	fitWidth() {
+		this.setZoom("fit-width");
+	}
+	/** Called when the view becomes visible again, since a hidden view cannot measure itself. */
+	shown() {
+		this.rescale();
+		this.update();
+	}
+	scrollToPage(page) {
+		this.element.scrollTop = positionToScrollTop(this.layout, {
+			page,
+			offset: 0
+		}) - 16;
+		this.update();
+	}
+	scrollToRect(page, rect) {
+		const top = (this.layout.tops[page] ?? 0) + rect.y * (this.layout.heights[page] ?? 0);
+		const height = this.element.clientHeight;
+		if (!(top > this.element.scrollTop && top < this.element.scrollTop + height * .7)) this.element.scrollTop = top - height * SCROLL_TARGET_FRACTION;
+		this.update();
+	}
+	setHighlights(highlights) {
+		const previous = this.highlightsByPage;
+		this.highlightsByPage = /* @__PURE__ */ new Map();
+		for (const highlight of highlights) this.highlightsByPage.set(highlight.page, [...this.highlightsByPage.get(highlight.page) ?? [], highlight]);
+		const touched = /* @__PURE__ */ new Set([...previous.keys(), ...this.highlightsByPage.keys()]);
+		for (const page of touched) this.pages[page]?.setHighlights(this.highlightsByPage.get(page) ?? []);
+	}
+	setSearchMarks(marks) {
+		const touched = /* @__PURE__ */ new Set([...this.searchPages, ...marks.keys()]);
+		this.searchPages = new Set(marks.keys());
+		for (const page of touched) this.pages[page]?.setSearchMarks(marks.get(page) ?? []);
+	}
+	get widestPage() {
+		return Math.max(0, ...this.sizes.map((size) => size.width));
+	}
+	rescale() {
+		const available = this.element.clientWidth - 32;
+		if (this.element.clientWidth === 0) return;
+		const scale = resolveScale(this.zoom, available, this.widestPage);
+		if (Math.abs(scale - this.scale) < SCALE_EPSILON) return;
+		const anchor = this.pendingPosition ?? (this.scale > 0 ? this.position() : null);
+		this.pendingPosition = null;
+		this.scale = scale;
+		this.cache.clear();
+		this.applyLayout();
+		if (anchor) this.element.scrollTop = positionToScrollTop(this.layout, anchor);
+		for (const listener of this.listeners) listener.onZoomChanged(scale, formatZoom(scale), this.zoom);
+		this.update();
+	}
+	applyLayout() {
+		this.layout = computeLayout(this.sizes, this.scale);
+		const contentWidth = this.layout.contentWidth;
+		this.surface.style.height = `${String(this.layout.totalHeight)}px`;
+		this.surface.style.width = `${String(contentWidth + 32)}px`;
+		this.pages.forEach((page, index) => {
+			const width = this.layout.widths[index] ?? 0;
+			page.place(16 + (contentWidth - width) / 2, this.layout.tops[index] ?? 0, width, this.layout.heights[index] ?? 0);
+		});
+	}
+	handleResize() {
+		const width = this.element.clientWidth;
+		if (width === this.lastWidth) return;
+		this.lastWidth = width;
+		if (this.zoom === "fit-width" || this.scale === 0) this.rescale();
+		this.scheduleUpdate();
+	}
+	scheduleUpdate() {
+		if (this.frame) return;
+		this.frame = requestAnimationFrame(() => {
+			this.frame = 0;
+			this.update();
+		});
+	}
+	update() {
+		const height = this.element.clientHeight;
+		if (height === 0 || this.scale === 0) return;
+		const top = this.element.scrollTop;
+		const range = visibleRange(this.layout, top, height, height * PRERENDER_VIEWPORTS);
+		for (const index of [...this.active]) if (index < range.first || index > range.last) {
+			this.pages[index]?.deactivate();
+			this.active.delete(index);
+		}
+		for (let index = range.first; index <= range.last; index++) {
+			this.pages[index]?.activate(this.scale);
+			this.active.add(index);
+		}
+		const page = currentPage(this.layout, top, height);
+		if (page !== this.lastPage) {
+			this.lastPage = page;
+			for (const listener of this.listeners) listener.onPageChanged(page, this.doc.pageCount);
+		}
+	}
+	handleClick(event) {
+		if (!window.getSelection()?.isCollapsed) return;
+		const target = event.target;
+		if (!(target instanceof Element)) return;
+		const pageElement = target.closest(".page");
+		const index = Number(pageElement?.dataset["page"]);
+		if (!pageElement || Number.isNaN(index)) return;
+		const box = pageElement.getBoundingClientRect();
+		const x = (event.clientX - box.left) / box.width;
+		const y = (event.clientY - box.top) / box.height;
+		const hit = (this.highlightsByPage.get(index) ?? []).find((h) => h.rects.some((rect) => containsPoint(rect, x, y)));
+		if (!hit) return;
+		const anchor = new DOMRect(event.clientX, event.clientY, 0, 0);
+		for (const listener of this.listeners) listener.onHighlightClicked(hit.id, anchor);
+	}
+};
+// src/settings/settings.ts
+/**
+* The user's settings, their defaults and the check for values read back from storage.
+*/
+var THEMES = [
+	"light",
+	"dark",
+	"sepia"
+];
+var DEFAULT_SETTINGS = {
+	theme: "light",
+	defaultZoom: 1,
+	readwiseToken: ""
+};
+function isTheme(value) {
+	return THEMES.some((theme) => theme === value);
+}
+function isSettings(value) {
+	return typeof value === "object" && value !== null && "theme" in value && isTheme(value.theme) && "defaultZoom" in value && isZoomSetting(value.defaultZoom) && "readwiseToken" in value && typeof value.readwiseToken === "string";
+}
+// src/settings/settings-dialog.ts
+/**
+* The settings dialog: theme, default zoom and the Readwise token.
+*/
+var FIT_WIDTH_VALUE = "fit-width";
+function zoomOptionValue(setting) {
+	return setting === "fit-width" ? FIT_WIDTH_VALUE : String(setting);
+}
+function parseZoom(value) {
+	const parsed = value === FIT_WIDTH_VALUE ? FIT_WIDTH_VALUE : Number(value);
+	return isZoomSetting(parsed) ? parsed : null;
+}
+function option(value, label) {
+	const node = el("option", "", [label]);
+	node.value = value;
+	return node;
+}
+function field(label, control) {
+	return el("label", "field", [el("span", "field-label", [label]), control]);
+}
+var SettingsDialog = class {
+	current;
+	listener;
+	element = el("div", "dialog-backdrop");
+	theme = el("select", "setting-theme");
+	zoom = el("select", "setting-zoom");
+	token = el("input", "setting-token");
+	constructor(current, listener) {
+		this.current = current;
+		this.listener = listener;
+		this.element.hidden = true;
+		this.theme.append(...THEMES.map((theme) => option(theme, theme.charAt(0).toUpperCase() + theme.slice(1))));
+		this.zoom.append(option(FIT_WIDTH_VALUE, "Fit width"), ...ZOOM_STEPS.map((step) => option(String(step), formatZoom(step))));
+		this.token.type = "password";
+		this.token.placeholder = "Readwise access token";
+		this.token.autocomplete = "off";
+		for (const control of [
+			this.theme,
+			this.zoom,
+			this.token
+		]) control.addEventListener("change", () => {
+			this.commit();
+		});
+		const dialog = el("div", "dialog", [
+			el("h2", "", ["Settings"]),
+			field("Theme", this.theme),
+			field("Default zoom", this.zoom),
+			field("Readwise token", this.token),
+			button({
+				label: "Done",
+				title: "Close settings",
+				onClick: () => {
+					this.close();
+				},
+				className: "primary"
+			})
+		]);
+		dialog.setAttribute("role", "dialog");
+		this.element.append(dialog);
+		this.element.addEventListener("mousedown", (event) => {
+			if (event.target === this.element) this.close();
+		});
+		this.fill();
+	}
+	open() {
+		this.fill();
+		this.element.hidden = false;
+		this.theme.focus();
+	}
+	close() {
+		this.element.hidden = true;
+	}
+	get isOpen() {
+		return !this.element.hidden;
+	}
+	fill() {
+		this.theme.value = this.current.theme;
+		this.zoom.value = zoomOptionValue(this.current.defaultZoom);
+		this.token.value = this.current.readwiseToken;
+	}
+	commit() {
+		const theme = isTheme(this.theme.value) ? this.theme.value : this.current.theme;
+		const defaultZoom = parseZoom(this.zoom.value) ?? this.current.defaultZoom;
+		this.current = {
+			theme,
+			defaultZoom,
+			readwiseToken: this.token.value
+		};
+		this.listener.onSettingsChanged(this.current);
+	}
+};
+// src/settings/settings-store.ts
+/**
+* Holds the current settings, saves each change and tells observers about it.
+*/
+var SettingsStore = class {
+	persistence;
+	settings = DEFAULT_SETTINGS;
+	observers = [];
+	constructor(persistence) {
+		this.persistence = persistence;
+	}
+	addObserver(observer) {
+		this.observers.push(observer);
+	}
+	current() {
+		return this.settings;
+	}
+	load(settings) {
+		this.apply(settings);
+	}
+	onSettingsChanged(settings) {
+		this.apply(settings);
+		this.persistence.saveSettings(settings);
+	}
+	apply(settings) {
+		this.settings = settings;
+		for (const observer of this.observers) observer.onSettingsApplied(settings);
+	}
+};
+// src/tabs/tab-bar.ts
+/**
+* The row of document tabs with close buttons.
+*/
+var TabBar = class {
+	listener;
+	element = el("div", "tab-bar");
+	constructor(listener) {
+		this.listener = listener;
+		this.element.setAttribute("role", "tablist");
+	}
+	render(tabs, activeId) {
+		this.element.replaceChildren(...tabs.map((tab) => this.renderTab(tab, tab.id === activeId)));
+	}
+	renderTab(tab, active) {
+		const label = el("button", "tab-label", [tab.title]);
+		label.type = "button";
+		label.title = tab.title;
+		label.addEventListener("click", () => {
+			this.listener.onTabActivated(tab.id);
+		});
+		const close = el("button", "tab-close", ["×"]);
+		close.type = "button";
+		close.title = "Close tab";
+		close.addEventListener("click", () => {
+			this.listener.onTabClosed(tab.id);
+		});
+		const node = el("div", `tab tab-${tab.status}${active ? " active" : ""}`, [label, close]);
+		node.setAttribute("role", "tab");
+		node.dataset["tab"] = tab.id;
+		return node;
+	}
+};
+// src/outline/outline-panel.ts
+var OutlinePanel = class {
+	listener;
+	element = el("aside", "panel outline-panel");
+	tree = el("div", "outline-tree");
+	constructor(listener) {
+		this.listener = listener;
+		this.element.append(el("h2", "panel-title", ["Outline"]), this.tree);
+	}
+	setOutline(nodes) {
+		this.tree.replaceChildren();
+		if (nodes.length === 0) {
+			this.tree.append(el("p", "empty", ["This document has no outline."]));
+			return;
+		}
+		this.tree.append(this.renderLevel(nodes, true));
+	}
+	renderLevel(nodes, expanded) {
+		const list = el("ul", "outline-level");
+		list.hidden = !expanded;
+		for (const node of nodes) list.append(this.renderNode(node));
+		return list;
+	}
+	renderNode(node) {
+		const row = el("div", "outline-row");
+		const toggle = el("button", "outline-toggle", [node.children.length > 0 ? "▸" : ""]);
+		toggle.type = "button";
+		const title = el("button", "outline-title", [node.title]);
+		title.type = "button";
+		title.addEventListener("click", () => {
+			if (node.page !== null) this.listener.onOutlineSelected(node.page);
+		});
+		row.append(toggle, title);
+		const item = el("li", "outline-item", [row]);
+		if (node.children.length > 0) this.attachChildren(item, toggle, node.children);
+		return item;
+	}
+	/** Children are built on first expansion so that large outlines open quickly. */
+	attachChildren(item, toggle, children) {
+		let level = null;
+		toggle.addEventListener("click", () => {
+			if (!level) {
+				level = this.renderLevel(children, false);
+				item.append(level);
+			}
+			level.hidden = !level.hidden;
+			toggle.textContent = level.hidden ? "▸" : "▾";
+		});
+	}
+};
+// src/thumbnails/thumbnail-panel.ts
+var THUMBNAIL_WIDTH_PX = 120;
+var ThumbnailPanel = class {
+	doc;
+	listener;
+	element = el("aside", "panel thumbnails-panel");
+	list = el("div", "thumbnail-list");
+	thumbnails = [];
+	observer;
+	current = -1;
+	constructor(doc, sizes, listener) {
+		this.doc = doc;
+		this.listener = listener;
+		this.element.append(el("h2", "panel-title", ["Pages"]), this.list);
+		this.observer = new IntersectionObserver((entries) => {
+			for (const entry of entries) this.visibilityChanged(entry.target, entry.isIntersecting);
+		}, { root: this.element });
+		sizes.forEach((size, index) => {
+			this.addThumbnail(index, size);
+		});
+	}
+	dispose() {
+		this.observer.disconnect();
+		for (const thumbnail of this.thumbnails) {
+			thumbnail.job?.cancel();
+			thumbnail.job = null;
+		}
+	}
+	setCurrentPage(page) {
+		if (page === this.current) return;
+		this.thumbnails[this.current]?.element.classList.remove("current");
+		this.current = page;
+		const thumbnail = this.thumbnails[page];
+		thumbnail?.element.classList.add("current");
+		thumbnail?.element.scrollIntoView({ block: "nearest" });
+	}
+	addThumbnail(index, size) {
+		const element = el("button", "thumbnail", [el("span", "thumbnail-label", [String(index + 1)])]);
+		element.type = "button";
+		element.dataset["page"] = String(index);
+		element.style.width = `${String(THUMBNAIL_WIDTH_PX)}px`;
+		element.style.height = `${String(Math.round(THUMBNAIL_WIDTH_PX * size.height / size.width))}px`;
+		element.addEventListener("click", () => {
+			this.listener.onThumbnailSelected(index);
+		});
+		this.thumbnails.push({
+			element,
+			size,
+			job: null,
+			painted: false
+		});
+		this.list.append(element);
+		this.observer.observe(element);
+	}
+	visibilityChanged(target, visible) {
+		const index = Number(target instanceof HTMLElement ? target.dataset["page"] : NaN);
+		const thumbnail = this.thumbnails[index];
+		if (!thumbnail || thumbnail.painted) return;
+		if (!visible) {
+			thumbnail.job?.cancel();
+			thumbnail.job = null;
+			return;
+		}
+		this.paint(index, thumbnail);
+	}
+	paint(index, thumbnail) {
+		const canvas = document.createElement("canvas");
+		const job = this.doc.renderPage(index, THUMBNAIL_WIDTH_PX / thumbnail.size.width, canvas);
+		thumbnail.job = job;
+		job.done.then(() => {
+			if (thumbnail.job !== job) return;
+			thumbnail.painted = true;
+			thumbnail.element.prepend(canvas);
+		}, () => {
+			thumbnail.job = null;
+		});
+	}
+};
+// src/search/find.ts
+var LINE_BREAK_JOINER = " ";
+function buildPageText(runs) {
+	const starts = [];
+	let text = "";
+	for (const run of runs) {
+		starts.push(text.length);
+		text += run.text;
+		if (run.endsLine) text += LINE_BREAK_JOINER;
+	}
+	return {
+		text,
+		starts
+	};
+}
+function normalizeQuery(query) {
+	return query.trim().replace(/\s+/g, " ").toLowerCase();
+}
+function findMatches(page, query) {
+	const needle = normalizeQuery(query);
+	if (!needle) return [];
+	const haystack = page.text.replace(/\s/g, " ").toLowerCase();
+	if (haystack.length !== page.text.length) return [];
+	const matches = [];
+	let from = haystack.indexOf(needle);
+	while (from !== -1) {
+		matches.push({
+			start: from,
+			end: from + needle.length
+		});
+		from = haystack.indexOf(needle, from + needle.length);
+	}
+	return matches;
+}
+function runRect(run, from, to, size) {
+	const length = Math.max(run.text.length, 1);
+	const lerp = (t) => ({
+		x: run.start.x + (run.end.x - run.start.x) * t,
+		y: run.start.y + (run.end.y - run.start.y) * t
+	});
+	const a = lerp(from / length);
+	const b = lerp(to / length);
+	const xs = [
+		a.x,
+		b.x,
+		a.x + run.up.x,
+		b.x + run.up.x
+	];
+	const ys = [
+		a.y,
+		b.y,
+		a.y + run.up.y,
+		b.y + run.up.y
+	];
+	const left = Math.min(...xs);
+	const top = Math.min(...ys);
+	return {
+		x: left / size.width,
+		y: top / size.height,
+		w: (Math.max(...xs) - left) / size.width,
+		h: (Math.max(...ys) - top) / size.height
+	};
+}
+/** One rectangle per text run the match touches. */
+function matchRects(runs, page, match, size) {
+	const rects = [];
+	runs.forEach((run, index) => {
+		const runStart = page.starts[index] ?? 0;
+		const from = Math.max(match.start, runStart) - runStart;
+		const to = Math.min(match.end, runStart + run.text.length) - runStart;
+		if (to > from) rects.push(runRect(run, from, to, size));
+	});
+	return rects;
+}
+// src/search/search-bar.ts
+/**
+* The search box with next/previous buttons and a match counter.
+*/
+var SearchBar = class {
+	element = el("div", "search-bar");
+	input = el("input", "search-input");
+	count = el("span", "search-count");
+	constructor(listener) {
+		this.element.hidden = true;
+		this.input.type = "search";
+		this.input.placeholder = "Search in document";
+		this.input.addEventListener("input", () => {
+			listener.onSearchQuery(this.input.value);
+		});
+		this.input.addEventListener("keydown", (event) => {
+			if (event.key === "Enter") {
+				event.preventDefault();
+				if (event.shiftKey) listener.onSearchPrevious();
+				else listener.onSearchNext();
+			} else if (event.key === "Escape") listener.onSearchClosed();
+		});
+		this.element.append(this.input, this.count, button({
+			label: "↑",
+			title: "Previous match (Shift+Enter)",
+			onClick: () => {
+				listener.onSearchPrevious();
+			},
+			className: "search-prev"
+		}), button({
+			label: "↓",
+			title: "Next match (Enter)",
+			onClick: () => {
+				listener.onSearchNext();
+			},
+			className: "search-next"
+		}), button({
+			label: "×",
+			title: "Close search (Esc)",
+			onClick: () => {
+				listener.onSearchClosed();
+			},
+			className: "search-close"
+		}));
+	}
+	get isOpen() {
+		return !this.element.hidden;
+	}
+	get query() {
+		return this.input.value;
+	}
+	open() {
+		this.element.hidden = false;
+		this.input.focus();
+		this.input.select();
+	}
+	close() {
+		this.element.hidden = true;
+	}
+	show(state) {
+		this.count.textContent = describeSearch(state);
+	}
+};
+function describeSearch(state) {
+	if (!state.query.trim()) return "";
+	if (state.hits.length === 0) return state.searching ? "Searching…" : "No matches";
+	const position = `${String(state.active + 1)} of ${String(state.hits.length)}`;
+	return state.searching ? `${position}…` : position;
+}
+// src/search/search-controller.ts
+var EMPTY_SEARCH = {
+	query: "",
+	hits: [],
+	active: -1,
+	searching: false
+};
+var SearchController = class {
+	doc;
+	sizes;
+	listeners = [];
+	pageCache = /* @__PURE__ */ new Map();
+	state = EMPTY_SEARCH;
+	generation = 0;
+	constructor(doc, sizes) {
+		this.doc = doc;
+		this.sizes = sizes;
+	}
+	addListener(listener) {
+		this.listeners.push(listener);
+	}
+	get current() {
+		return this.state;
+	}
+	async search(query, startPage) {
+		const generation = ++this.generation;
+		if (!normalizeQuery(query)) {
+			this.publish(EMPTY_SEARCH);
+			return;
+		}
+		this.publish({
+			query,
+			hits: [],
+			active: -1,
+			searching: true
+		});
+		for (let step = 0; step < this.doc.pageCount; step++) {
+			const page = (startPage + step) % this.doc.pageCount;
+			const found = await this.hitsOnPage(page, query);
+			if (generation !== this.generation) return;
+			if (found.length > 0) this.addHits(found);
+		}
+		this.publish({
+			...this.state,
+			searching: false
+		});
+	}
+	next() {
+		this.step(1);
+	}
+	previous() {
+		this.step(-1);
+	}
+	clear() {
+		this.generation++;
+		this.publish(EMPTY_SEARCH);
+	}
+	step(direction) {
+		const count = this.state.hits.length;
+		if (count === 0) return;
+		const active = (this.state.active + direction + count) % count;
+		this.publish({
+			...this.state,
+			active
+		});
+	}
+	addHits(found) {
+		const activeHit = this.state.hits[this.state.active];
+		const hits = [...this.state.hits, ...found].sort((a, b) => a.page - b.page);
+		const first = found[0];
+		const target = activeHit ?? first;
+		this.publish({
+			...this.state,
+			hits,
+			active: target ? hits.indexOf(target) : -1
+		});
+	}
+	async hitsOnPage(page, query) {
+		const cached = await this.pageText(page);
+		const size = this.sizes[page];
+		if (!size) return [];
+		return findMatches(cached.text, query).map((match) => ({
+			page,
+			rects: matchRects(cached.runs, cached.text, match, size)
+		}));
+	}
+	async pageText(page) {
+		const existing = this.pageCache.get(page);
+		if (existing) return existing;
+		const runs = await this.doc.pageText(page);
+		const entry = {
+			runs,
+			text: buildPageText(runs)
+		};
+		this.pageCache.set(page, entry);
+		return entry;
+	}
+	publish(state) {
+		this.state = state;
+		for (const listener of this.listeners) listener.onSearchChanged(state);
+	}
+};
+// src/highlights/model.ts
+/**
+* The highlight record, its colours and the checks for data read back from storage.
+*/
+var HIGHLIGHT_COLORS = [
+	"yellow",
+	"green",
+	"blue",
+	"pink"
+];
+function isHighlightColor(value) {
+	return HIGHLIGHT_COLORS.some((color) => color === value);
+}
+function isHighlight(value) {
+	return typeof value === "object" && value !== null && "id" in value && typeof value.id === "string" && "page" in value && typeof value.page === "number" && "rects" in value && Array.isArray(value.rects) && value.rects.every(isNormRect) && "text" in value && typeof value.text === "string" && "color" in value && isHighlightColor(value.color) && "note" in value && typeof value.note === "string" && "createdAt" in value && typeof value.createdAt === "number" && "updatedAt" in value && typeof value.updatedAt === "number" && "syncedAt" in value && (value.syncedAt === null || typeof value.syncedAt === "number");
+}
+function sortHighlights(highlights) {
+	const top = (h) => h.rects[0]?.y ?? 0;
+	return [...highlights].sort((a, b) => a.page - b.page || top(a) - top(b) || a.createdAt - b.createdAt);
+}
+// src/highlights/highlight-store.ts
+/**
+* Holds one document's highlights, applies edits and tells listeners when the set changes.
+*/
+var HighlightStore = class {
+	ids;
+	clock;
+	items;
+	listeners = [];
+	constructor(initial, ids, clock) {
+		this.ids = ids;
+		this.clock = clock;
+		this.items = sortHighlights(initial);
+	}
+	addListener(listener) {
+		this.listeners.push(listener);
+	}
+	all() {
+		return this.items;
+	}
+	get(id) {
+		return this.items.find((h) => h.id === id);
+	}
+	add(input) {
+		const now = this.clock.now();
+		const highlight = {
+			...input,
+			id: this.ids.nextId(),
+			note: "",
+			createdAt: now,
+			updatedAt: now,
+			syncedAt: null
+		};
+		this.replaceAll([...this.items, highlight]);
+		return highlight;
+	}
+	setNote(id, note) {
+		this.update(id, { note });
+	}
+	setColor(id, color) {
+		this.update(id, { color });
+	}
+	remove(id) {
+		this.replaceAll(this.items.filter((h) => h.id !== id));
+	}
+	markSynced(ids, at) {
+		this.replaceAll(this.items.map((h) => ids.includes(h.id) ? {
+			...h,
+			syncedAt: at
+		} : h));
+	}
+	update(id, change) {
+		const now = this.clock.now();
+		this.replaceAll(this.items.map((h) => h.id === id ? {
+			...h,
+			...change,
+			updatedAt: now
+		} : h));
+	}
+	replaceAll(next) {
+		this.items = sortHighlights(next);
+		for (const listener of this.listeners) listener.onHighlightsChanged(this.items);
+	}
+};
+// src/highlights/markdown.ts
+/**
+* Renders a document's highlights and notes as a Markdown file.
+*/
+function quote(text) {
+	return text.trim().split(/\r?\n/).map((line) => `> ${line}`).join("\n");
+}
+function notesToMarkdown(title, highlights) {
+	const sections = sortHighlights(highlights).map((h) => {
+		const lines = [
+			`### Page ${String(h.page + 1)}`,
+			"",
+			quote(h.text)
+		];
+		const note = h.note.trim();
+		if (note) lines.push("", `**Note:** ${note}`);
+		return lines.join("\n");
+	});
+	return [
+		`# ${title}`,
+		"",
+		`${String(highlights.length)} highlights`,
+		"",
+		...sections.map((s) => `${s}\n`)
+	].join("\n");
+}
+function markdownFileName(documentName) {
+	return `${documentName.replace(/\.pdf$/i, "").replace(/[^\w.-]+/g, "_") || "notes"}-notes.md`;
+}
+// src/highlights/color-swatches.ts
+/**
+* Builds the row of colour buttons shared by the selection toolbar and the highlight editor.
+*/
+function colorSwatches(onPick, current = null) {
+	const row = el("div", "swatches");
+	for (const color of HIGHLIGHT_COLORS) {
+		const swatch = button({
+			label: "",
+			title: `Highlight ${color}`,
+			onClick: () => {
+				onPick(color);
+			},
+			className: `swatch swatch-${color}`
+		});
+		swatch.dataset["color"] = color;
+		if (color === current) swatch.classList.add("selected");
+		row.append(swatch);
+	}
+	return row;
+}
+function markSelectedSwatch(row, color) {
+	for (const swatch of row.querySelectorAll(".swatch")) swatch.classList.toggle("selected", swatch.dataset["color"] === color);
+}
+// src/highlights/highlight-editor.ts
+/**
+* A popover for changing an existing highlight's colour, editing its note or deleting it.
+*/
+var EDITOR_OFFSET_PX = 10;
+var EDITOR_MARGIN_PX = 8;
+var HighlightEditor = class {
+	listener;
+	element = el("div", "floating highlight-editor");
+	documentListeners = new AbortController();
+	constructor(listener) {
+		this.listener = listener;
+		this.element.hidden = true;
+		const { signal } = this.documentListeners;
+		document.addEventListener("mousedown", (event) => {
+			if (event.target instanceof Node && !this.element.contains(event.target)) this.hide();
+		}, { signal });
+		document.addEventListener("keydown", (event) => {
+			if (event.key === "Escape") this.hide();
+		}, { signal });
+	}
+	get isOpen() {
+		return !this.element.hidden;
+	}
+	open(highlight, anchor) {
+		const note = el("textarea", "note-input");
+		note.placeholder = "Add a note";
+		note.value = highlight.note;
+		note.addEventListener("input", () => {
+			this.listener.onEditorNote(highlight.id, note.value);
+		});
+		const remove = button({
+			label: "Delete",
+			title: "Delete this highlight",
+			onClick: () => {
+				this.hide();
+				this.listener.onEditorDelete(highlight.id);
+			},
+			className: "danger"
+		});
+		const colors = colorSwatches((color) => {
+			this.listener.onEditorColor(highlight.id, color);
+			markSelectedSwatch(colors, color);
+		}, highlight.color);
+		this.element.replaceChildren(colors, note, remove);
+		this.element.hidden = false;
+		const left = Math.min(anchor.left, window.innerWidth - this.element.offsetWidth - EDITOR_MARGIN_PX);
+		const top = Math.min(anchor.bottom + EDITOR_OFFSET_PX, window.innerHeight - this.element.offsetHeight - EDITOR_MARGIN_PX);
+		this.element.style.left = `${String(Math.max(EDITOR_MARGIN_PX, left))}px`;
+		this.element.style.top = `${String(Math.max(EDITOR_MARGIN_PX, top))}px`;
+		note.focus();
+	}
+	dispose() {
+		this.documentListeners.abort();
+	}
+	hide() {
+		this.element.hidden = true;
+	}
+};
+// src/highlights/notes-panel.ts
+/**
+* The notes side panel: lists a document's highlights and notes, with export and sync actions.
+*/
+var NotesPanel = class {
+	listener;
+	element = el("aside", "panel notes-panel");
+	list = el("div", "notes-list");
+	empty = el("p", "empty", ["Select text in the document to highlight it."]);
+	status = el("p", "sync-status");
+	cards = /* @__PURE__ */ new Map();
+	constructor(listener) {
+		this.listener = listener;
+		const actions = el("div", "panel-actions", [button({
+			label: "Export Markdown",
+			title: "Download highlights and notes as Markdown",
+			onClick: () => {
+				listener.onExportRequested();
+			},
+			className: "export-notes"
+		}), button({
+			label: "Sync to Readwise",
+			title: "Send new and edited highlights to Readwise",
+			onClick: () => {
+				listener.onSyncRequested();
+			},
+			className: "sync-notes"
+		})]);
+		this.element.append(el("h2", "panel-title", ["Notes"]), actions, this.status, this.empty, this.list);
+	}
+	setStatus(message) {
+		this.status.textContent = message;
+	}
+	setHighlights(highlights) {
+		this.empty.hidden = highlights.length > 0;
+		const keep = new Set(highlights.map((h) => h.id));
+		for (const [id, card] of this.cards) {
+			if (keep.has(id)) continue;
+			card.element.remove();
+			this.cards.delete(id);
+		}
+		const ordered = highlights.map((h) => this.updatedCard(h));
+		const current = [...this.list.children];
+		if (ordered.length !== current.length || ordered.some((card, i) => card.element !== current[i])) this.list.replaceChildren(...ordered.map((card) => card.element));
+	}
+	updatedCard(highlight) {
+		const card = this.cards.get(highlight.id) ?? this.createCard(highlight);
+		card.element.className = `note-card note-${highlight.color}`;
+		card.page.textContent = `Page ${String(highlight.page + 1)}`;
+		card.quote.textContent = highlight.text;
+		if (card.note.value !== highlight.note) card.note.value = highlight.note;
+		return card;
+	}
+	createCard(highlight) {
+		const page = el("button", "note-page");
+		page.type = "button";
+		const quote = el("blockquote", "note-quote");
+		const note = el("textarea", "note-input");
+		note.placeholder = "Add a note";
+		const element = el("div", "note-card", [
+			page,
+			quote,
+			note,
+			button({
+				label: "Delete",
+				title: "Delete this highlight",
+				onClick: () => {
+					this.listener.onNoteDeleted(highlight.id);
+				},
+				className: "danger"
+			})
+		]);
+		element.dataset["highlight"] = highlight.id;
+		page.addEventListener("click", () => {
+			this.listener.onNoteSelected(highlight);
+		});
+		note.addEventListener("input", () => {
+			this.listener.onNoteEdited(highlight.id, note.value);
+		});
+		const card = {
+			element,
+			quote,
+			page,
+			note
+		};
+		this.cards.set(highlight.id, card);
+		return card;
+	}
+};
+// src/highlights/selection-toolbar.ts
+/**
+* A small floating toolbar that offers highlight colours whenever text in a page view is selected.
+*/
+var TOOLBAR_OFFSET_PX = 8;
+var SelectionToolbar = class {
+	scope;
+	listener;
+	element = el("div", "floating selection-toolbar");
+	constructor(scope, listener) {
+		this.scope = scope;
+		this.listener = listener;
+		this.element.hidden = true;
+		this.element.append(colorSwatches((color) => {
+			this.hide();
+			this.listener.onHighlightRequested(color);
+		}));
+		this.element.addEventListener("mousedown", (event) => {
+			event.preventDefault();
+		});
+		scope.addEventListener("mouseup", () => {
+			window.setTimeout(() => {
+				this.refresh();
+			}, 0);
+		});
+		scope.addEventListener("keyup", () => {
+			this.refresh();
+		});
+		scope.addEventListener("mousedown", () => {
+			this.hide();
+		});
+		scope.addEventListener("scroll", () => {
+			this.hide();
+		});
+	}
+	hide() {
+		this.element.hidden = true;
+	}
+	refresh() {
+		const selection = window.getSelection();
+		if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+			this.hide();
+			return;
+		}
+		const range = selection.getRangeAt(0);
+		const rects = range.getClientRects();
+		const last = rects[rects.length - 1];
+		if (!last || !this.scope.contains(range.commonAncestorContainer)) {
+			this.hide();
+			return;
+		}
+		this.element.hidden = false;
+		this.element.style.left = `${String(Math.max(TOOLBAR_OFFSET_PX, last.right - this.element.offsetWidth))}px`;
+		this.element.style.top = `${String(last.bottom + TOOLBAR_OFFSET_PX)}px`;
+	}
+};
+// src/highlights/selection.ts
+/**
+* Turns the current text selection into page-relative highlight geometry, one capture per page touched.
+*/
+var TEXT_LAYER_SELECTOR = ".textLayer";
+function toPixelRect(rect) {
+	return {
+		left: rect.left,
+		top: rect.top,
+		right: rect.right,
+		bottom: rect.bottom
+	};
+}
+/** The part of `range` that lies inside `container`, or null when they do not overlap. */
+function clipToContainer(range, container) {
+	if (!range.intersectsNode(container)) return null;
+	const clipped = range.cloneRange();
+	if (range.comparePoint(container, 0) >= 0) clipped.setStart(container, 0);
+	if (range.comparePoint(container, container.childNodes.length) <= 0) clipped.setEnd(container, container.childNodes.length);
+	return clipped.collapsed ? null : clipped;
+}
+function capturePage(range, pageElement) {
+	const page = Number(pageElement.dataset["page"]);
+	const layer = pageElement.querySelector(TEXT_LAYER_SELECTOR);
+	if (Number.isNaN(page) || !layer) return null;
+	const clipped = clipToContainer(range, layer);
+	if (!clipped) return null;
+	const text = clipped.toString().replace(/\s+/g, " ").trim();
+	const box = toPixelRect(pageElement.getBoundingClientRect());
+	const rects = mergeLineRects([...clipped.getClientRects()].map(toPixelRect)).map((rect) => toNormRect(rect, box));
+	return text && rects.length > 0 ? {
+		page,
+		rects,
+		text
+	} : null;
+}
+function highlightsFromSelection(selection, pageElements) {
+	const captures = [];
+	for (let index = 0; index < selection.rangeCount; index++) {
+		const range = selection.getRangeAt(index);
+		for (const pageElement of pageElements) {
+			if (!range.intersectsNode(pageElement)) continue;
+			const capture = capturePage(range, pageElement);
+			if (capture) captures.push(capture);
+		}
+	}
+	return captures;
+}
+// src/app/highlight-presenter.ts
+/**
+* Connects the highlight store to the page overlays, the notes panel, the selection toolbar and the editor popover.
+*/
+var MARKDOWN_MIME_TYPE = "text/markdown";
+var HighlightPresenter = class {
+	store;
+	view;
+	title;
+	persistence;
+	sync;
+	settings;
+	clock;
+	notes;
+	toolbar;
+	editor;
+	constructor(store, view, title, persistence, sync, settings, clock) {
+		this.store = store;
+		this.view = view;
+		this.title = title;
+		this.persistence = persistence;
+		this.sync = sync;
+		this.settings = settings;
+		this.clock = clock;
+		this.notes = new NotesPanel(this);
+		this.toolbar = new SelectionToolbar(view.element, this);
+		this.editor = new HighlightEditor(this);
+		store.addListener(this);
+		view.addListener(this);
+		this.onHighlightsChanged(store.all());
+	}
+	dispose() {
+		this.editor.dispose();
+	}
+	onHighlightsChanged(highlights) {
+		this.view.setHighlights(highlights);
+		this.notes.setHighlights(highlights);
+		this.persistence.saveHighlights(highlights);
+	}
+	onHighlightRequested(color) {
+		const selection = window.getSelection();
+		if (!selection) return;
+		const added = highlightsFromSelection(selection, this.view.pageElements).map((capture) => this.store.add({
+			...capture,
+			color
+		}));
+		selection.removeAllRanges();
+		const last = added[added.length - 1];
+		const rect = last?.rects[0];
+		const box = last ? this.view.pageElements[last.page]?.getBoundingClientRect() : void 0;
+		if (last && rect && box) {
+			const anchor = new DOMRect(box.left + rect.x * box.width, box.top + (rect.y + rect.h) * box.height, rect.w * box.width, 0);
+			this.editor.open(last, anchor);
+		}
+	}
+	onHighlightClicked(id, anchor) {
+		const highlight = this.store.get(id);
+		if (highlight) this.editor.open(highlight, anchor);
+	}
+	onPageChanged() {
+		this.editor.hide();
+	}
+	onZoomChanged() {
+		this.editor.hide();
+	}
+	onEditorColor(id, color) {
+		this.store.setColor(id, color);
+	}
+	onEditorNote(id, note) {
+		this.store.setNote(id, note);
+	}
+	onEditorDelete(id) {
+		this.store.remove(id);
+	}
+	onNoteSelected(highlight) {
+		const rect = highlight.rects[0];
+		if (rect) this.view.scrollToRect(highlight.page, rect);
+	}
+	onNoteEdited(id, note) {
+		this.store.setNote(id, note);
+	}
+	onNoteDeleted(id) {
+		this.store.remove(id);
+	}
+	onExportRequested() {
+		downloadText(markdownFileName(this.title), MARKDOWN_MIME_TYPE, notesToMarkdown(this.title, this.store.all()));
+	}
+	onSyncRequested() {
+		this.runSync();
+	}
+	async runSync() {
+		this.notes.setStatus("Syncing…");
+		try {
+			const result = await this.sync.sync(this.settings.current().readwiseToken, this.title, this.store.all());
+			this.store.markSynced(result.sentIds, this.clock.now());
+			this.notes.setStatus(result.sentIds.length > 0 ? `Sent ${String(result.sentIds.length)} highlights to Readwise.` : "Everything is already synced.");
+		} catch (error) {
+			this.notes.setStatus(error instanceof SyncError ? error.message : "Sync failed.");
+		}
+	}
+};
+// src/app/search-presenter.ts
+var SearchPresenter = class {
+	controller;
+	view;
+	bar;
+	revealed = null;
+	constructor(controller, view) {
+		this.controller = controller;
+		this.view = view;
+		this.bar = new SearchBar(this);
+		controller.addListener(this);
+	}
+	open() {
+		this.bar.open();
+		if (this.bar.query) this.controller.search(this.bar.query, this.view.position().page);
+	}
+	next() {
+		this.controller.next();
+	}
+	previous() {
+		this.controller.previous();
+	}
+	onSearchQuery(query) {
+		this.controller.search(query, this.view.position().page);
+	}
+	onSearchNext() {
+		this.controller.next();
+	}
+	onSearchPrevious() {
+		this.controller.previous();
+	}
+	onSearchClosed() {
+		this.bar.close();
+		this.controller.clear();
+		this.view.element.focus();
+	}
+	onSearchChanged(state) {
+		this.bar.show(state);
+		const marks = /* @__PURE__ */ new Map();
+		state.hits.forEach((hit, index) => {
+			marks.set(hit.page, [...marks.get(hit.page) ?? [], {
+				rects: hit.rects,
+				active: index === state.active
+			}]);
+		});
+		this.view.setSearchMarks(marks);
+		const active = state.hits[state.active] ?? null;
+		const rect = active?.rects[0];
+		if (active && rect && active !== this.revealed) this.view.scrollToRect(active.page, rect);
+		this.revealed = active;
+	}
+};
+// src/app/reader-session.ts
+var SAVE_VIEW_DELAY_MS = 400;
+var ReaderSession = class {
+	parts;
+	element = el("div", "pane");
+	view;
+	search;
+	highlights;
+	thumbnails;
+	listeners = [];
+	page = 0;
+	zoomLabel = "";
+	saveTimer = 0;
+	constructor(parts) {
+		this.parts = parts;
+		this.view = new DocumentView(parts.doc, parts.sizes, parts.zoom);
+		this.search = new SearchPresenter(new SearchController(parts.doc, parts.sizes), this.view);
+		this.highlights = new HighlightPresenter(parts.store, this.view, parts.name, { saveHighlights: (items) => parts.repository.saveHighlights(parts.doc.id, items) }, parts.sync, parts.settings, parts.clock);
+		const outline = new OutlinePanel(this);
+		outline.setOutline(parts.outline);
+		this.thumbnails = new ThumbnailPanel(parts.doc, parts.sizes, this);
+		this.view.addListener(this);
+		this.element.append(outline.element, this.thumbnails.element, el("div", "reader", [
+			this.search.bar.element,
+			this.view.element,
+			this.highlights.toolbar.element,
+			this.highlights.editor.element
+		]), this.highlights.notes.element);
+	}
+	get id() {
+		return this.parts.doc.id;
+	}
+	get name() {
+		return this.parts.name;
+	}
+	get currentPage() {
+		return this.page;
+	}
+	get pageCount() {
+		return this.parts.doc.pageCount;
+	}
+	get zoomText() {
+		return this.zoomLabel;
+	}
+	addListener(listener) {
+		this.listeners.push(listener);
+	}
+	async restoreViewState() {
+		const saved = await this.parts.repository.loadViewState(this.id);
+		if (!saved) return;
+		this.view.setZoom(saved.zoom);
+		this.view.restore(saved.position);
+	}
+	goToPage(page) {
+		this.view.scrollToPage(Math.min(Math.max(page, 0), this.pageCount - 1));
+	}
+	shown() {
+		this.view.shown();
+		this.view.element.focus();
+	}
+	flush() {
+		window.clearTimeout(this.saveTimer);
+		return this.parts.repository.saveViewState(this.id, {
+			position: this.view.position(),
+			zoom: this.view.zoomSetting
+		});
+	}
+	async dispose() {
+		window.clearTimeout(this.saveTimer);
+		this.highlights.dispose();
+		this.view.dispose();
+		this.thumbnails.dispose();
+		await this.parts.doc.destroy();
+	}
+	onPageChanged(page) {
+		this.page = page;
+		this.thumbnails.setCurrentPage(page);
+		this.scheduleSave();
+		this.notify();
+	}
+	onZoomChanged(_scale, label) {
+		this.zoomLabel = label;
+		this.scheduleSave();
+		this.notify();
+	}
+	onHighlightClicked() {}
+	onOutlineSelected(page) {
+		this.goToPage(page);
+	}
+	onThumbnailSelected(page) {
+		this.goToPage(page);
+	}
+	notify() {
+		for (const listener of this.listeners) listener.onSessionStatusChanged(this);
+	}
+	scheduleSave() {
+		window.clearTimeout(this.saveTimer);
+		this.saveTimer = window.setTimeout(() => {
+			this.flush();
+		}, SAVE_VIEW_DELAY_MS);
+	}
+};
+// src/app/app.ts
+/**
+* The application shell: toolbar, tabs, panels, file opening, keyboard shortcuts and restoring the last visit.
+*/
+var PAGE_INPUT_WIDTH_CH = 5;
+var App = class {
+	engine;
+	repository;
+	factory;
+	settings;
+	element = el("div", "app");
+	tabs = [];
+	activeId = null;
+	left = "none";
+	notesOpen = false;
+	tabBar = new TabBar(this);
+	workspace = el("div", "workspace");
+	empty = el("div", "empty-state", [el("h1", "", ["Open a PDF"]), el("p", "", ["Drop a file here, press Ctrl/Cmd+O, or use the Open button."])]);
+	fileInput = el("input", "file-input");
+	pageInput = el("input", "page-input");
+	pageCount = el("span", "page-count");
+	zoomLabel = el("span", "zoom-label");
+	settingsDialog;
+	constructor(engine, repository, factory, settings) {
+		this.engine = engine;
+		this.repository = repository;
+		this.factory = factory;
+		this.settings = settings;
+		this.settingsDialog = new SettingsDialog(settings.current(), settings);
+		settings.addObserver(this);
+		this.buildChrome();
+		this.element.append(this.buildToolbar(), this.tabBar.element, this.workspace, this.empty, this.settingsDialog.element, this.fileInput);
+		this.listenForInput();
+		this.refresh();
+	}
+	async start() {
+		this.settings.load(await this.repository.loadSettings());
+		const session = await this.repository.loadSession();
+		for (const id of session.openDocuments) {
+			const stored = await this.repository.loadDocument(id);
+			if (stored) await this.openBytes(stored.bytes, stored.name, false);
+		}
+		const target = this.tabs.find((tab) => tab.session?.id === session.active) ?? this.tabs[0];
+		if (target) this.activate(target.id);
+	}
+	onSettingsApplied(settings) {
+		this.element.dataset["theme"] = settings.theme;
+	}
+	onSessionStatusChanged(session) {
+		if (session.id === this.activeSession()?.id) this.showStatus(session);
+	}
+	onTabActivated(id) {
+		this.activate(id);
+	}
+	onTabClosed(id) {
+		this.closeTab(id);
+	}
+	async openFiles(files) {
+		for (const file of files) await this.openBytes(new Uint8Array(await file.arrayBuffer()), file.name, true);
+	}
+	buildChrome() {
+		this.fileInput.type = "file";
+		this.fileInput.accept = "application/pdf,.pdf";
+		this.fileInput.multiple = true;
+		this.fileInput.hidden = true;
+		this.fileInput.addEventListener("change", () => {
+			this.openFiles([...this.fileInput.files ?? []]);
+			this.fileInput.value = "";
+		});
+		this.pageInput.type = "text";
+		this.pageInput.inputMode = "numeric";
+		this.pageInput.style.width = `${String(PAGE_INPUT_WIDTH_CH)}ch`;
+		this.pageInput.title = "Go to page";
+		this.pageInput.addEventListener("keydown", (event) => {
+			if (event.key !== "Enter") return;
+			const page = Number.parseInt(this.pageInput.value, 10);
+			if (!Number.isNaN(page)) this.activeSession()?.goToPage(page - 1);
+			this.activeSession()?.view.element.focus();
+		});
+	}
+	buildToolbar() {
+		const run = (command) => () => {
+			this.run(command);
+		};
+		return el("header", "toolbar", [
+			button({
+				label: "Open",
+				title: "Open a PDF (Ctrl/Cmd+O)",
+				onClick: run("open-file"),
+				className: "open-file"
+			}),
+			button({
+				label: "Outline",
+				title: "Toggle outline (Alt+1)",
+				onClick: run("toggle-outline"),
+				className: "toggle-outline"
+			}),
+			button({
+				label: "Pages",
+				title: "Toggle thumbnails (Alt+2)",
+				onClick: run("toggle-thumbnails"),
+				className: "toggle-thumbnails"
+			}),
+			el("span", "spacer"),
+			this.pageInput,
+			el("span", "", ["/"]),
+			this.pageCount,
+			el("span", "spacer"),
+			button({
+				label: "−",
+				title: "Zoom out (-)",
+				onClick: run("zoom-out"),
+				className: "zoom-out"
+			}),
+			this.zoomLabel,
+			button({
+				label: "+",
+				title: "Zoom in (+)",
+				onClick: run("zoom-in"),
+				className: "zoom-in"
+			}),
+			button({
+				label: "Fit width",
+				title: "Fit to width (0)",
+				onClick: run("fit-width"),
+				className: "fit-width"
+			}),
+			el("span", "spacer"),
+			button({
+				label: "Search",
+				title: "Search (Ctrl/Cmd+F)",
+				onClick: run("search"),
+				className: "toggle-search"
+			}),
+			button({
+				label: "Notes",
+				title: "Toggle notes (Alt+3)",
+				onClick: run("toggle-notes"),
+				className: "toggle-notes"
+			}),
+			button({
+				label: "Settings",
+				title: "Settings",
+				onClick: () => {
+					this.settingsDialog.open();
+				},
+				className: "open-settings"
+			})
+		]);
+	}
+	listenForInput() {
+		document.addEventListener("keydown", (event) => {
+			const command = resolveShortcut({
+				key: event.key,
+				code: event.code,
+				ctrl: event.ctrlKey,
+				meta: event.metaKey,
+				shift: event.shiftKey,
+				alt: event.altKey,
+				typing: isEditableTarget(event.target)
+			});
+			if (!command) return;
+			event.preventDefault();
+			this.run(command);
+		});
+		window.addEventListener("dragover", (event) => {
+			event.preventDefault();
+			this.element.classList.add("dragging");
+		});
+		window.addEventListener("dragleave", (event) => {
+			if (event.relatedTarget === null) this.element.classList.remove("dragging");
+		});
+		window.addEventListener("drop", (event) => {
+			event.preventDefault();
+			this.element.classList.remove("dragging");
+			this.openFiles([...event.dataTransfer?.files ?? []].filter((file) => /\.pdf$/i.test(file.name) || file.type === "application/pdf"));
+		});
+		window.addEventListener("pagehide", () => {
+			for (const tab of this.tabs) tab.session?.flush();
+		});
+	}
+	run(command) {
+		const session = this.activeSession();
+		switch (command) {
+			case "open-file":
+				this.fileInput.click();
+				break;
+			case "search":
+				session?.search.open();
+				break;
+			case "search-next":
+				session?.search.next();
+				break;
+			case "search-previous":
+				session?.search.previous();
+				break;
+			case "zoom-in":
+				session?.view.zoomIn();
+				break;
+			case "zoom-out":
+				session?.view.zoomOut();
+				break;
+			case "fit-width":
+				session?.view.fitWidth();
+				break;
+			case "close-tab":
+				if (this.activeId) this.closeTab(this.activeId);
+				break;
+			case "next-tab":
+				this.stepTab(1);
+				break;
+			case "previous-tab":
+				this.stepTab(-1);
+				break;
+			case "toggle-outline":
+				this.toggleLeft("outline");
+				break;
+			case "toggle-thumbnails":
+				this.toggleLeft("thumbnails");
+				break;
+			case "toggle-notes":
+				this.notesOpen = !this.notesOpen;
+				this.refresh();
+		}
+	}
+	toggleLeft(panel) {
+		this.left = this.left === panel ? "none" : panel;
+		this.refresh();
+	}
+	stepTab(direction) {
+		const index = this.tabs.findIndex((tab) => tab.id === this.activeId);
+		const next = this.tabs[(index + direction + this.tabs.length) % this.tabs.length];
+		if (next) this.activate(next.id);
+	}
+	activeTab() {
+		return this.tabs.find((tab) => tab.id === this.activeId);
+	}
+	activeSession() {
+		return this.activeTab()?.session ?? null;
+	}
+	async openBytes(bytes, name, isNew) {
+		const tab = {
+			id: crypto.randomUUID(),
+			title: name,
+			status: "loading",
+			message: "Opening…",
+			session: null,
+			pane: el("div", "tab-pane")
+		};
+		this.tabs.push(tab);
+		this.workspace.append(tab.pane);
+		this.activate(tab.id);
+		try {
+			const doc = await this.engine.open(bytes);
+			const duplicate = this.tabs.find((other) => other !== tab && other.session?.id === doc.id);
+			if (duplicate) {
+				await doc.destroy();
+				this.discard(tab);
+				this.activate(duplicate.id);
+				return;
+			}
+			if (isNew) await this.repository.saveDocument(doc.id, {
+				name,
+				bytes
+			});
+			const session = await this.factory.create(doc, name);
+			session.addListener(this);
+			tab.session = session;
+			tab.status = "ready";
+			tab.pane.replaceChildren(session.element);
+			this.refresh();
+			await session.restoreViewState();
+			this.activate(tab.id);
+		} catch (error) {
+			tab.status = "error";
+			tab.message = error instanceof PdfOpenError ? error.message : "Could not open this PDF.";
+			this.renderError(tab);
+			this.refresh();
+		}
+	}
+	renderError(tab) {
+		tab.pane.replaceChildren(el("div", "error-view", [el("h2", "", [`Could not open ${tab.title}`]), el("p", "", [tab.message])]));
+	}
+	activate(id) {
+		const previous = this.activeSession();
+		this.activeId = id;
+		if (previous && previous !== this.activeSession()) previous.flush();
+		this.refresh();
+		const session = this.activeSession();
+		session?.shown();
+		if (session) this.showStatus(session);
+		this.saveSession();
+	}
+	async closeTab(id) {
+		const tab = this.tabs.find((candidate) => candidate.id === id);
+		if (!tab) return;
+		const index = this.tabs.indexOf(tab);
+		const wasActive = this.activeId === id;
+		this.discard(tab);
+		if (tab.session) {
+			await this.repository.forgetDocument(tab.session.id);
+			await tab.session.dispose();
+		}
+		if (wasActive) {
+			const next = this.tabs[Math.min(index, this.tabs.length - 1)];
+			this.activeId = next?.id ?? null;
+			if (next) this.activate(next.id);
+		}
+		this.refresh();
+		await this.saveSession();
+	}
+	discard(tab) {
+		this.tabs.splice(this.tabs.indexOf(tab), 1);
+		tab.pane.remove();
+		if (this.activeId === tab.id) this.activeId = null;
+	}
+	saveSession() {
+		const open = this.tabs.flatMap((tab) => tab.session ? [tab.session.id] : []);
+		return this.repository.saveSession({
+			openDocuments: open,
+			active: this.activeSession()?.id ?? null
+		});
+	}
+	showStatus(session) {
+		this.pageCount.textContent = String(session.pageCount);
+		if (document.activeElement !== this.pageInput) this.pageInput.value = String(session.currentPage + 1);
+		this.zoomLabel.textContent = session.zoomText;
+	}
+	refresh() {
+		const infos = this.tabs.map((tab) => ({
+			id: tab.id,
+			title: tab.title,
+			status: tab.status
+		}));
+		this.tabBar.render(infos, this.activeId);
+		for (const tab of this.tabs) tab.pane.hidden = tab.id !== this.activeId;
+		this.empty.hidden = this.tabs.length > 0;
+		this.workspace.hidden = this.tabs.length === 0;
+		this.element.dataset["left"] = this.left;
+		this.element.dataset["notes"] = this.notesOpen ? "open" : "closed";
+		if (!this.activeSession()) {
+			clear(this.pageCount);
+			this.pageInput.value = "";
+			this.zoomLabel.textContent = "";
+		}
+	}
+};
+// src/app/session-factory.ts
+/**
+* Builds a reader session for an opened document, loading its saved highlights and reading position.
+*/
+var SessionFactory = class {
+	repository;
+	sync;
+	settings;
+	ids;
+	clock;
+	constructor(repository, sync, settings, ids, clock) {
+		this.repository = repository;
+		this.sync = sync;
+		this.settings = settings;
+		this.ids = ids;
+		this.clock = clock;
+	}
+	async create(doc, name) {
+		const [sizes, outline, saved] = await Promise.all([
+			doc.pageSizes(),
+			doc.outline().catch(() => []),
+			this.repository.loadHighlights(doc.id)
+		]);
+		return new ReaderSession({
+			doc,
+			name,
+			sizes,
+			outline,
+			store: new HighlightStore(saved, this.ids, this.clock),
+			zoom: this.settings.current().defaultZoom,
+			repository: this.repository,
+			sync: this.sync,
+			settings: this.settings,
+			clock: this.clock
+		});
+	}
+};
+// src/app/system.ts
+var UuidSource = class {
+	nextId() {
+		return crypto.randomUUID();
+	}
+};
+var SystemClock = class {
+	now() {
+		return Date.now();
+	}
+};
+// src/persistence/repository.ts
+/**
+* Typed access to everything the app saves: open documents, tabs, view positions, highlights and settings.
+*/
+var SESSION_KEY = "current";
+var SETTINGS_KEY = "current";
+var EMPTY_SESSION = {
+	openDocuments: [],
+	active: null
+};
+function isStoredDocument(value) {
+	return typeof value === "object" && value !== null && "name" in value && typeof value.name === "string" && "bytes" in value && value.bytes instanceof Uint8Array;
+}
+function isSession(value) {
+	return typeof value === "object" && value !== null && "openDocuments" in value && Array.isArray(value.openDocuments) && value.openDocuments.every((id) => typeof id === "string") && "active" in value && (value.active === null || typeof value.active === "string");
+}
+function isViewState(value) {
+	return typeof value === "object" && value !== null && "position" in value && isViewPosition(value.position) && "zoom" in value && isZoomSetting(value.zoom);
+}
+var Repository = class {
+	store;
+	constructor(store) {
+		this.store = store;
+	}
+	saveDocument(id, document) {
+		return this.store.write("documents", id, document);
+	}
+	async loadDocument(id) {
+		const value = await this.store.read("documents", id);
+		return isStoredDocument(value) ? value : null;
+	}
+	async forgetDocument(id) {
+		await this.store.remove("documents", id);
+		await this.store.remove("viewState", id);
+	}
+	saveSession(session) {
+		return this.store.write("session", SESSION_KEY, session);
+	}
+	async loadSession() {
+		const value = await this.store.read("session", SESSION_KEY);
+		return isSession(value) ? value : EMPTY_SESSION;
+	}
+	saveViewState(id, state) {
+		return this.store.write("viewState", id, state);
+	}
+	async loadViewState(id) {
+		const value = await this.store.read("viewState", id);
+		return isViewState(value) ? value : null;
+	}
+	saveHighlights(id, highlights) {
+		return this.store.write("highlights", id, highlights);
+	}
+	async loadHighlights(id) {
+		const value = await this.store.read("highlights", id);
+		return Array.isArray(value) ? value.filter(isHighlight) : [];
+	}
+	saveSettings(settings) {
+		return this.store.write("settings", SETTINGS_KEY, settings);
+	}
+	async loadSettings() {
+		const value = await this.store.read("settings", SETTINGS_KEY);
+		return isSettings(value) ? value : DEFAULT_SETTINGS;
+	}
+};
+// src/main.ts
+/**
+* Starts the reader in the browser, wiring the adapters, engine and app together.
+* @actor Reader: opens PDFs, reads them, searches, highlights and takes notes
+*/
+var repository = new Repository(new IndexedDbKeyValueStore());
+var settings = new SettingsStore(repository);
+var factory = new SessionFactory(repository, new ReadwiseSync(new ReadwiseHttpTransport()), settings, new UuidSource(), new SystemClock());
+var app = new App(new PdfJsEngine(), repository, factory, settings);
+document.body.append(app.element);
+app.start();
+
+</script>
+</body>
+</html>
