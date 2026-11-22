@@ -27,7 +27,7 @@ function discoverTools() {
  * e.g., "svg-arc-generator.html" -> "SVG Arc Generator"
  */
 function filenameToDisplayName(filename) {
-  const acronyms = ['svg', 'json', 'html', 'css', 'js', 'xml', 'api', 'url', 'qr', 'rgb'];
+  const acronyms = ['pdf', 'svg', 'json', 'html', 'css', 'js', 'xml', 'api', 'url', 'qr', 'rgb'];
 
   return filename
     .replace(/\.html$/, '') // Remove .html extension
